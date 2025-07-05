@@ -5,9 +5,17 @@ STATE_LEN = 273  # Length of the state array
 ACTION_LEN = 12 # Number of possible actions
 
 def run_game(game, num_episodes=1000, verbose=False):
+    # for _ in tqdm(range(num_episodes)):
+    wins = [0, 0]
     for _ in tqdm(range(num_episodes)):
         game.play(verbose=verbose)
+        winner = game.state.get_winner()
+        if winner != -1:
+            wins[winner] += 1
         game.reset()
+    if verbose:
+        print(f'Wins: {wins[0]} - {wins[1]}')
+    return wins
 
 def state_to_array(state):
     def threshold_encode(cut, length):

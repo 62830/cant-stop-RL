@@ -83,7 +83,7 @@ class State:
         R_WIN = 1
         R_LOSE = -1
         R_NULL = -0.01
-        R_COLUMN = 0.05
+        R_COLUMN = 0.1
 
         if self.get_legal_actions()[0].is_null():
             # have to make null move when no valid action after 'go'
@@ -167,6 +167,12 @@ class State:
     def get_reward(self):
         # return [ 1 for score in self.score if score >= 3 else -1]
         return [int(score >= 3)*2-1 for score in self.score]
+
+    def get_winner(self):
+        for i, score in enumerate(self.score):
+            if score >= 3:
+                return i
+        return -1 
     
     def __str__(self):
         # print every track, dice, and score
@@ -269,9 +275,10 @@ class RLGame:
         self.agents = agents
         self.state = State(num_agents = len(agents))
         self.reward = [0 for _ in range(len(agents))]
+        self.steps = 0
 
     def play(self, verbose = False):
-        while not self.state.is_terminal():
+        while not self.state.is_terminal() and self.steps < 500:
             agent_idx = self.state.get_cur_agent_idx()
             agent = self.agents[agent_idx]
             action = agent.act(self.state, self.reward[agent_idx], False)
@@ -284,7 +291,9 @@ class RLGame:
             self.state, reward = self.state.update(action)
             for i in range(len(self.agents)):
                 self.reward[i] += reward[i]
-        
+            # self.reward[agent_idx] += -0.0001 # small penalty for long game
+            self.steps += 1
+
         # send the final state to all agents 
         for agent_idx in range(len(self.agents)):
             self.agents[agent_idx].act(self.state, self.reward[agent_idx], True)
@@ -294,3 +303,4 @@ class RLGame:
         self.reward = [0 for _ in range(len(self.agents))]
         for agent in self.agents:
             agent.reset()
+        self.steps = 0

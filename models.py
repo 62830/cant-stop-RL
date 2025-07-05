@@ -15,9 +15,9 @@ class SmallModel(nn.Module):
     def __init__(self, input_size, output_size):
         super(SmallModel, self).__init__()
         self.main = nn.Sequential(
-            nn.Linear(input_size, 64),
+            nn.Linear(input_size, 128),
             nn.ReLU(),
-            nn.Linear(64, 64),
+            nn.Linear(128, 64),
             nn.ReLU(),
         )
         self.action_head = nn.Linear(64, output_size)

@@ -21,7 +21,7 @@ class Fraction_Eval_Agent:
             fraction_score += p / l
         return fraction_score < 0.6
 
-    def act(self, state):
+    def act(self, state, reward=None, done=False):
         legal_actions = state.get_legal_actions()
         if len(legal_actions) == 1:
             return legal_actions[0]
@@ -62,7 +62,7 @@ class Fraction_Eval_Agent_v2:
                 return False
         return fraction_score < 0.8
 
-    def act(self, state):
+    def act(self, state, reward=None, done=None):
         legal_actions = state.get_legal_actions()
         if len(legal_actions) == 1:
             return legal_actions[0]
