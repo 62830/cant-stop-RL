@@ -15,12 +15,13 @@ baselines = {
 
 class Wrap:
     # wrap agent for RLGame to use in Game
-    def __init__(self, agent):
+    def __init__(self, agent, deterministic=False):
         self.agent = agent
+        self.deterministic = deterministic
     def act(self, state):
         # Game agent.act(state)
         # RLGame agent.act(state, reward, done)
-        return self.agent.act(state, 0, False)
+        return self.agent.act(state, 0, False, deterministic=self.deterministic)
     def reset(self):
         self.agent.reset()
 
@@ -61,8 +62,8 @@ def example_game(wrapped_rl_agent, baseline_name, save_path=None):
             for state, action in episode:
                 f.write(f'{state}\n{action}\n')
 
-def test(rl_agent):
-    wrapped_rl_agent = Wrap(rl_agent)
+def test(rl_agent, deterministic=False):
+    wrapped_rl_agent = Wrap(rl_agent, deterministic=deterministic)
     for baseline_name in baselines:
         example_game(wrapped_rl_agent, baseline_name, save_path=f'example_{baseline_name}.txt')
     for baseline_name in baselines:
@@ -71,7 +72,8 @@ def test(rl_agent):
 if __name__ == "__main__":
     # Example usage
     rl_agent = RLAgent(SmallModel(STATE_LEN, ACTION_LEN))
-    test(rl_agent)
+    rl_agent.model.load_path('model_weights/rl_agent_v8_259.pth')
+    test(rl_agent, deterministic=True)
     
 # rl_agent = RLAgent(SmallModel(273, 12))
 # rl_agent.model.load_path('model_weights/rl_agent.pth')

@@ -82,8 +82,8 @@ class State:
         reward = [0 for _ in range(self.num_agents)]
         R_WIN = 1
         R_LOSE = -1
-        R_NULL = -0.01
-        R_COLUMN = 0.1
+        R_NULL = 0
+        R_COLUMN = 0
 
         if self.get_legal_actions()[0].is_null():
             # have to make null move when no valid action after 'go'

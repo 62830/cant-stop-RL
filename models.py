@@ -30,7 +30,7 @@ class SmallModel(nn.Module):
         value = torch.tanh(value)
         return action_logits, value
 
-    def predict(self, state, legal_actions):
+    def predict(self, state, legal_actions, deterministic=False):
         state = torch.tensor(state_to_array(state), dtype=torch.float32).unsqueeze(0)
         action_logit, value = self.forward(state)
         action_logit = action_logit.squeeze(0)
@@ -38,7 +38,10 @@ class SmallModel(nn.Module):
         legal_action_indices = [a.value for a in legal_actions]
         legal_action_logit = action_logit[legal_action_indices]
         legal_action_probs = torch.softmax(legal_action_logit, dim=0)
-        action_index = torch.multinomial(legal_action_probs, 1).item()
+        if deterministic:
+            action_index = torch.argmax(legal_action_probs).item()
+        else:
+            action_index = torch.multinomial(legal_action_probs, 1).item()
         action = legal_actions[action_index]
         return action, legal_action_probs[action_index].item(), value.item()
 

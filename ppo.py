@@ -56,14 +56,14 @@ def one_epoch(agent, buffer, optimizer, batch_size=64, num_steps=10, dev='cpu'):
 
         surr1 = ratio * advantage_normed
         surr2 = torch.clamp(ratio, 0.8, 1.2) * advantage_normed
-        policy_loss = -torch.min(surr1, surr2).mean()
+        policy_loss = -torch.min(surr1, surr2).mean() * 10
 
         value_target = advantage + value_old_arr
         value_loss = nn.functional.mse_loss(value.squeeze(), value_target)
 
         entropy = -torch.sum(prob * torch.log(prob + 1e-10), dim=1).mean()
         clip_frac = ((ratio < 0.8) | (ratio > 1.2)).float().mean()
-        loss = policy_loss + value_loss - 0.001 * entropy
+        loss = policy_loss + value_loss - 0.01 * entropy
         
         optimizer.zero_grad()
         loss.backward()
@@ -88,15 +88,6 @@ def train_rl_agent(weight_path=None, lr=3e-4, num_epoch=10, num_episodes=100, ba
     optimizer = optim.Adam(ppo_agent.model.parameters(), lr=lr)
     buffer = TransitionBuffer()
 
-    # rollout_agent = RLAgent(SmallModel(STATE_LEN, ACTION_LEN), transition_buffer=buffer)
-    # diverse_agents = [
-    #     RLAgent(SmallModel(STATE_LEN, ACTION_LEN)),
-    #     Agent(),
-    #     Fraction_Eval_Agent(),
-    #     Fraction_Eval_Agent_v2()
-    # ]
-    # mixed_agent = MixedAgent(diverse_agents)
-    # rollout_agents = [rollout_agent, mixed_agent]
     rollout_agents = [
         RLAgent(SmallModel(STATE_LEN, ACTION_LEN), transition_buffer=buffer),
         RLAgent(SmallModel(STATE_LEN, ACTION_LEN), transition_buffer=buffer)
@@ -105,7 +96,6 @@ def train_rl_agent(weight_path=None, lr=3e-4, num_epoch=10, num_episodes=100, ba
     # second agent updates only when first agent beats it more than 60% of the time
 
     for rollout_agent in rollout_agents:
-        # rollout_agent.to(dev) # we're on CPU anyway
         rollout_agent.load_weights(ppo_agent.model.save_weights())
     
 
@@ -120,18 +110,15 @@ def train_rl_agent(weight_path=None, lr=3e-4, num_epoch=10, num_episodes=100, ba
             print(f'Update second agent weights at epoch {epoch + 1}')
             rollout_agents[1].load_weights(rollout_agents[0].model.save_weights())
             rollout_agents[0].model.save_path(f'model_weights/rl_agent_{version}_{epoch + 1}.pth')
-            test(rollout_agents[0])
+            test(rollout_agents[0], deterministic=True)
 
         one_epoch(ppo_agent, buffer, optimizer, batch_size=batch_size, num_steps=num_steps, dev=dev)
 
-        # for rollout_agent in rollout_agents:
-        #     rollout_agent.load_weights(ppo_agent.model.save_weights())
         rollout_agents[0].load_weights(ppo_agent.model.save_weights())
 
 if __name__ == '__main__':
     device = 'cpu'
     # weight_path = 'model_weights/rl_agent_v5_103.pth'
     weight_path = None
-    # train_rl_agent(weight_path=weight_path, lr=3e-4, num_epoch=10, num_episodes=50, batch_size=256, num_steps=150, dev=device, version='debug')
     train_rl_agent(weight_path=weight_path, lr=3e-4, num_epoch=10000, num_episodes=200, batch_size=256, num_steps=300, dev=device,
-                   version='v7')
+                   version='v9')

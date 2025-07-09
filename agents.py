@@ -47,9 +47,9 @@ class RLAgent:
         self.episode = []
         self.transition_buffer = transition_buffer
 
-    def act(self, state, reward, done):
+    def act(self, state, reward, done, deterministic=False):
         legal_actions = state.get_legal_actions()
-        action, action_prob, value = self.model.predict(state, legal_actions)
+        action, action_prob, value = self.model.predict(state, legal_actions, deterministic=deterministic)
         if self.verbose:
             print(state)
             print(f'agent action: {action}, action_prob: {action_prob}, value: {value}')
