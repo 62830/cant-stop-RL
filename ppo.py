@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 from agents import RLAgent, MixedAgent, Agent
 from fraction_eval import Fraction_Eval_Agent, Fraction_Eval_Agent_v2
-from models import SmallModel
+from models import SmallModel, LargeModel
 from game import RLGame
 from transition_buffer import TransitionBuffer
 from test import test
@@ -56,7 +56,7 @@ def one_epoch(agent, buffer, optimizer, batch_size=64, num_steps=10, dev='cpu'):
 
         surr1 = ratio * advantage_normed
         surr2 = torch.clamp(ratio, 0.8, 1.2) * advantage_normed
-        policy_loss = -torch.min(surr1, surr2).mean() * 10
+        policy_loss = -torch.min(surr1, surr2).mean()
 
         value_target = advantage + value_old_arr
         value_loss = nn.functional.mse_loss(value.squeeze(), value_target)
@@ -81,16 +81,18 @@ def one_epoch(agent, buffer, optimizer, batch_size=64, num_steps=10, dev='cpu'):
     print(f'Policy Loss: {avg_policy_loss:.4f}, Value Loss: {avg_value_loss:.4f}, Entropy: {avg_entropy:.4f}, Clip Fraction: {avg_clip_frac:.4f}')
 
 def train_rl_agent(weight_path=None, lr=3e-4, num_epoch=10, num_episodes=100, batch_size=64, num_steps=100, dev='cpu', version='v1'):
-    ppo_agent = RLAgent(SmallModel(STATE_LEN, ACTION_LEN))
+    # ppo_agent = RLAgent(SmallModel(STATE_LEN, ACTION_LEN))
+    ppo_agent = RLAgent(LargeModel(STATE_LEN, ACTION_LEN))
     if weight_path:
         ppo_agent.model.load_path(weight_path)
         ppo_agent.model.to(dev)
     optimizer = optim.Adam(ppo_agent.model.parameters(), lr=lr)
     buffer = TransitionBuffer()
 
+    # only the learner agent 0 records transitions
     rollout_agents = [
-        RLAgent(SmallModel(STATE_LEN, ACTION_LEN), transition_buffer=buffer),
-        RLAgent(SmallModel(STATE_LEN, ACTION_LEN), transition_buffer=buffer)
+        RLAgent(LargeModel(STATE_LEN, ACTION_LEN), transition_buffer=buffer),
+        RLAgent(LargeModel(STATE_LEN, ACTION_LEN))
     ]
     # first agent updates quickly,
     # second agent updates only when first agent beats it more than 60% of the time
@@ -118,7 +120,7 @@ def train_rl_agent(weight_path=None, lr=3e-4, num_epoch=10, num_episodes=100, ba
 
 if __name__ == '__main__':
     device = 'cpu'
-    # weight_path = 'model_weights/rl_agent_v5_103.pth'
+    # weight_path = 'model_weights/rl_agent_v8_677.pth'
     weight_path = None
     train_rl_agent(weight_path=weight_path, lr=3e-4, num_epoch=10000, num_episodes=200, batch_size=256, num_steps=300, dev=device,
-                   version='v9')
+                   version='v10')

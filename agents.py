@@ -29,12 +29,12 @@ class HumanAgent:
 def episode_to_transitions(episode, gamma=0.99, lam=0.95):
     # episode is a list of (s, a, a_prob, v, r, done)
     # transitions need (s, a, a_prob, v, s', done, adv)
+
     transitions = []
     advantage = 0.0
-    for i in reversed(range(len(episode))):
-        state, action, action_prob, value, reward, done = episode[i]
-        next_state = episode[i + 1][0] if i + 1 < len(episode) else state
-        next_value = episode[i + 1][3] if i + 1 < len(episode) else value
+    for i in reversed(range(len(episode) - 1)):
+        state, action, action_prob, value, _, _ = episode[i]
+        next_state, _, _, next_value, reward, done = episode[i + 1]
         delta = reward + gamma * next_value * (1 - done) - value
         advantage = delta + gamma * lam * advantage * (1 - done)
         transitions.append((state, action, action_prob, value, next_state, done, advantage))

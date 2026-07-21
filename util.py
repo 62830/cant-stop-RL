@@ -1,8 +1,12 @@
 import numpy as np
 from tqdm import tqdm
+from multiprocessing import Pool
+from copy import deepcopy
 
 STATE_LEN = 273  # Length of the state array
 ACTION_LEN = 12 # Number of possible actions
+
+
 
 def run_game(game, num_episodes=1000, verbose=False):
     # for _ in tqdm(range(num_episodes)):
@@ -16,6 +20,26 @@ def run_game(game, num_episodes=1000, verbose=False):
     if verbose:
         print(f'Wins: {wins[0]} - {wins[1]}')
     return wins
+
+def run_game_parallel(game, num_episodes=1000, verbose=False, num_workers=4):
+    per_worker = num_episodes // num_workers
+    games = [deepcopy(game) for _ in range(num_workers)]
+    with Pool(num_workers) as pool:
+        results = list(tqdm(pool.imap(lambda g: run_game(g, per_worker, verbose), games), total=num_workers))
+    total_wins = [0, 0]
+    for result in results:
+        total_wins[0] += result[0]
+        total_wins[1] += result[1]
+    if verbose:
+        print(f'Total Wins: {total_wins[0]} - {total_wins[1]}')
+
+    # copy transitions from each game's agents' transition buffers to the main game's transition buffer
+    for g in games:
+        for agent in g.agents:
+            if hasattr(agent, 'transition_buffer'):
+                for transition in agent.transition_buffer.transitions:
+                    game.agents[0].transition_buffer.add(transition)
+    return total_wins
 
 def state_to_array(state):
     def threshold_encode(cut, length):

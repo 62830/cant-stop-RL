@@ -1,0 +1,3 @@
+v8 40% winrate against v2, can't improve further
+v9 10 * policy loss
+v10 large model
