@@ -56,7 +56,7 @@ def one_epoch(agent, buffer, optimizer, batch_size=64, num_steps=10, dev='cpu'):
 
         surr1 = ratio * advantage_normed
         surr2 = torch.clamp(ratio, 0.8, 1.2) * advantage_normed
-        policy_loss = -torch.min(surr1, surr2).mean() * 10
+        policy_loss = -torch.min(surr1, surr2).mean()
 
         value_target = advantage + value_old_arr
         value_loss = nn.functional.mse_loss(value.squeeze(), value_target)
@@ -81,9 +81,9 @@ def one_epoch(agent, buffer, optimizer, batch_size=64, num_steps=10, dev='cpu'):
     print(f'Policy Loss: {avg_policy_loss:.4f}, Value Loss: {avg_value_loss:.4f}, Entropy: {avg_entropy:.4f}, Clip Fraction: {avg_clip_frac:.4f}')
 
 def train_rl_agent(weight_path=None, lr=3e-4, num_epoch=10, num_episodes=100, batch_size=64, num_steps=100, dev='cpu', version='v1', num_workers=8):
-    model_cls = SepModel
+    # model_cls = SepModel
     # model_cls = SmallModel
-    # model_cls = LargeModel
+    model_cls = LargeModel
     ppo_agent = RLAgent(model_cls(STATE_LEN, ACTION_LEN))
     if weight_path:
         ppo_agent.model.load_path(weight_path)
@@ -92,9 +92,7 @@ def train_rl_agent(weight_path=None, lr=3e-4, num_epoch=10, num_episodes=100, ba
     buffer = TransitionBuffer()
 
     # rollout_agents hold the two self-play policies: agent 0 is the learner,
-    # agent 1 is the frozen opponent. Rollouts run in worker processes
-    # (run_game_parallel), so these objects are just weight holders + promotion
-    # bookkeeping; only the learner's transitions are collected (on-policy).
+    # agent 1 is the frozen opponent. only the learner's transitions are collected (on-policy).
     rollout_agents = [
         RLAgent(model_cls(STATE_LEN, ACTION_LEN)),
         RLAgent(model_cls(STATE_LEN, ACTION_LEN))
@@ -113,13 +111,14 @@ def train_rl_agent(weight_path=None, lr=3e-4, num_epoch=10, num_episodes=100, ba
             model_cls,
             rollout_agents[0].model.save_weights(),
             rollout_agents[1].model.save_weights(),
+            swap_first=True,
             num_episodes=num_episodes,
             num_workers=num_workers,
         )
         for transition in transitions:
             buffer.add(transition)
         print(f'Buffer size: {len(buffer)} Average episode length: {(len(buffer) / num_episodes):.2f} First agent wins: {wins[0]}, Second agent wins: {wins[1]}')
-        if wins[0] >= 0.59 * num_episodes:
+        if wins[0] >= 0.56 * num_episodes:
             print(f'Update second agent weights at epoch {epoch + 1}')
             rollout_agents[1].load_weights(rollout_agents[0].model.save_weights())
             rollout_agents[0].model.save_path(f'model_weights/rl_agent_{version}_{epoch + 1}.pth')
@@ -133,5 +132,4 @@ if __name__ == '__main__':
     device = 'cpu'
     # weight_path = 'model_weights/rl_agent_v8_677.pth'
     weight_path = None
-    train_rl_agent(weight_path=weight_path, lr=3e-4, num_epoch=10000, num_episodes=400, batch_size=256, num_steps=300, dev=device,
-                   version='v14', num_workers=12)
+    train_rl_agent(weight_path=weight_path, lr=3e-4, num_epoch=10000, num_episodes=400, batch_size=256, num_steps=300, dev=device, version='v17', num_workers=12)

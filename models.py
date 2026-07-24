@@ -17,6 +17,8 @@ class SmallModel(nn.Module):
         self.main = nn.Sequential(
             nn.Linear(input_size, 128),
             nn.ReLU(),
+            nn.Linear(128,128),
+            nn.ReLU(),
             nn.Linear(128, 64),
             nn.ReLU(),
         )
@@ -60,32 +62,25 @@ class SmallModel(nn.Module):
     def save_weights(self):
         return self.state_dict()
 
+
+class ResBlock(nn.Module):
+    def __init__(self, d):
+        super().__init__()
+        self.f = nn.Sequential(nn.LayerNorm(d), nn.Linear(d, d), nn.ReLU(),
+                               nn.Linear(d, d))
+    def forward(self, x): return x + self.f(x)
+
 class LargeModel(nn.Module):
-    def __init__(self, input_size, output_size):
-        super(LargeModel, self).__init__()
-        self.main = nn.Sequential(
-            nn.Linear(input_size, 256),
-            nn.ReLU(),
-            nn.Linear(256, 256),
-            nn.ReLU(),
-        )
-        self.action_head = nn.Sequential(
-            nn.Linear(256, 128),
-            nn.ReLU(),
-            nn.Linear(128, output_size)
-        )
-        self.value_head = nn.Sequential(
-            nn.Linear(256, 128),
-            nn.ReLU(),
-            nn.Linear(128, 1)
-        )
+    def __init__(self, input_size, output_size, d=128, n_blocks=2):
+        super().__init__()
+        self.inp = nn.Linear(input_size, d)
+        self.blocks = nn.Sequential(*[ResBlock(d) for _ in range(n_blocks)])
+        self.pi = nn.Linear(d, output_size)
+        self.v  = nn.Linear(d, 1)
 
     def forward(self, x):
-        x = self.main(x)
-        action_logits = self.action_head(x)
-        value = self.value_head(x)
-        value = torch.tanh(value)
-        return action_logits, value
+        h = self.blocks(torch.relu(self.inp(x)))
+        return self.pi(h), self.v(h)
 
     @torch.no_grad()
     def predict(self, state, legal_actions, deterministic=False):

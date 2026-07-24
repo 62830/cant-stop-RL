@@ -6,8 +6,6 @@ from copy import deepcopy
 STATE_LEN = 273  # Length of the state array
 ACTION_LEN = 12 # Number of possible actions
 
-
-
 def run_game(game, num_episodes=1000, verbose=False, progress=True):
     wins = [0, 0]
     for _ in (tqdm(range(num_episodes)) if progress else range(num_episodes)):
@@ -30,24 +28,41 @@ def _rollout_worker(task):
     from game import RLGame
     from transition_buffer import TransitionBuffer
 
-    model_cls, weights_learner, weights_opponent, n_episodes = task
+    model_cls, weights_learner, weights_opponent, learner_first, n_episodes = task
     buffer = TransitionBuffer()
     learner = RLAgent(model_cls(STATE_LEN, ACTION_LEN), transition_buffer=buffer)
     opponent = RLAgent(model_cls(STATE_LEN, ACTION_LEN))
     learner.model.load_weights(weights_learner)
     opponent.model.load_weights(weights_opponent)
-    game = RLGame([learner, opponent])
+
+    players = [learner, opponent]
+    if not learner_first:
+        players = players[::-1]
+    game = RLGame(players)
     wins = run_game(game, num_episodes=n_episodes, progress=False)
+    if not learner_first:
+        wins = wins[::-1]
     return wins, list(buffer)
 
-def run_game_parallel(model_cls, weights_learner, weights_opponent, num_episodes=1000, num_workers=8):
+def run_game_parallel(model_cls, weights_learner, weights_opponent, swap_first=False, num_episodes=1000, num_workers=8):
     # Fan the rollout out over num_workers processes and merge the results.
     # Returns (total_wins, transitions) where transitions come from the learner only.
-    per = num_episodes // num_workers
-    rem = num_episodes % num_workers
-    tasks = [(model_cls, weights_learner, weights_opponent, per + (1 if i < rem else 0))
-             for i in range(num_workers)]
-    tasks = [t for t in tasks if t[3] > 0]
+
+    def build_tasks(episodes, learner_first, workers):
+        per = episodes // workers
+        rem = episodes % workers
+        tasks = [(model_cls, weights_learner, weights_opponent, learner_first, per + (1 if i < rem else 0))
+                for i in range(workers)]
+        tasks = [t for t in tasks if t[4] > 0]
+        return tasks
+
+    if swap_first:
+        assert num_workers >= 2
+        tasks = build_tasks((num_episodes+1)//2, True, (num_workers+1)//2)
+        tasks.extend(build_tasks(num_episodes//2, False, num_workers//2))
+    else:
+        tasks = build_tasks(num_episodes, True, num_workers)
+
     with Pool(len(tasks)) as pool:
         results = pool.map(_rollout_worker, tasks)
     total_wins = [0, 0]
