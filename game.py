@@ -41,6 +41,11 @@ class State:
     def is_wait_for_go(self):
         return self.wait_for_go
 
+    def set_dice(self, dice):
+        # can't bother to check
+        # set after go
+        self.dice = dice
+
     def roll_dice(self):
         # roll 4 6-sided dice
         self.dice = [random.randint(1, 6) for _ in range(4)]

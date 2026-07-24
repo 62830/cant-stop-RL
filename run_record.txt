@@ -1,3 +1,5 @@
 v8 40% winrate against v2, can't improve further
 v9 10 * policy loss
 v10 large model
+v12 v8 recipe (small model, 10*policy loss) + fixes: reward-action realign & drop terminal row, only learner records (on-policy), 400 episodes to keep buffer size; reached 40% vs v2 by ep23
+v13 same as v12 + faster rollout only (no learning change): no_grad predict, torch 1-thread, process-parallel rollout (~30x); restarted fresh

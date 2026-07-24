@@ -8,10 +8,9 @@ ACTION_LEN = 12 # Number of possible actions
 
 
 
-def run_game(game, num_episodes=1000, verbose=False):
-    # for _ in tqdm(range(num_episodes)):
+def run_game(game, num_episodes=1000, verbose=False, progress=True):
     wins = [0, 0]
-    for _ in tqdm(range(num_episodes)):
+    for _ in (tqdm(range(num_episodes)) if progress else range(num_episodes)):
         game.play(verbose=verbose)
         winner = game.state.get_winner()
         if winner != -1:
@@ -21,25 +20,43 @@ def run_game(game, num_episodes=1000, verbose=False):
         print(f'Wins: {wins[0]} - {wins[1]}')
     return wins
 
-def run_game_parallel(game, num_episodes=1000, verbose=False, num_workers=4):
-    per_worker = num_episodes // num_workers
-    games = [deepcopy(game) for _ in range(num_workers)]
-    with Pool(num_workers) as pool:
-        results = list(tqdm(pool.imap(lambda g: run_game(g, per_worker, verbose), games), total=num_workers))
-    total_wins = [0, 0]
-    for result in results:
-        total_wins[0] += result[0]
-        total_wins[1] += result[1]
-    if verbose:
-        print(f'Total Wins: {total_wins[0]} - {total_wins[1]}')
+def _rollout_worker(task):
+    # Runs in a separate process. Each worker plays n_episodes of self-play with
+    # its own model copies and returns (wins, transitions). Only the learner
+    # records transitions, so the buffer stays on-policy (see fix #1).
+    import torch
+    torch.set_num_threads(1)  # batch-1 inference is faster single-threaded; avoids oversubscription across workers
+    from agents import RLAgent
+    from game import RLGame
+    from transition_buffer import TransitionBuffer
 
-    # copy transitions from each game's agents' transition buffers to the main game's transition buffer
-    for g in games:
-        for agent in g.agents:
-            if hasattr(agent, 'transition_buffer'):
-                for transition in agent.transition_buffer.transitions:
-                    game.agents[0].transition_buffer.add(transition)
-    return total_wins
+    model_cls, weights_learner, weights_opponent, n_episodes = task
+    buffer = TransitionBuffer()
+    learner = RLAgent(model_cls(STATE_LEN, ACTION_LEN), transition_buffer=buffer)
+    opponent = RLAgent(model_cls(STATE_LEN, ACTION_LEN))
+    learner.model.load_weights(weights_learner)
+    opponent.model.load_weights(weights_opponent)
+    game = RLGame([learner, opponent])
+    wins = run_game(game, num_episodes=n_episodes, progress=False)
+    return wins, list(buffer)
+
+def run_game_parallel(model_cls, weights_learner, weights_opponent, num_episodes=1000, num_workers=8):
+    # Fan the rollout out over num_workers processes and merge the results.
+    # Returns (total_wins, transitions) where transitions come from the learner only.
+    per = num_episodes // num_workers
+    rem = num_episodes % num_workers
+    tasks = [(model_cls, weights_learner, weights_opponent, per + (1 if i < rem else 0))
+             for i in range(num_workers)]
+    tasks = [t for t in tasks if t[3] > 0]
+    with Pool(len(tasks)) as pool:
+        results = pool.map(_rollout_worker, tasks)
+    total_wins = [0, 0]
+    transitions = []
+    for wins, trans in results:
+        total_wins[0] += wins[0]
+        total_wins[1] += wins[1]
+        transitions.extend(trans)
+    return total_wins, transitions
 
 def state_to_array(state):
     def threshold_encode(cut, length):
