@@ -1,3 +1,4 @@
 *.pyc
-*.pth
 *.txt
+log
+model_weights
