@@ -13,6 +13,8 @@ class State:
         self.tmp_track = []
         self.tmp_progress = []
         self.wait_for_go = False
+        # set after 'stop'; the turn is then ended by a forced 'null', like a bust
+        self.end_turn = False
         self.dice = [1, 1, 1, 1]
         self.roll_dice()
 
@@ -91,16 +93,17 @@ class State:
         R_COLUMN = 0.1
 
         if self.get_legal_actions()[0].is_null():
-            # have to make null move when no valid action after 'go'
+            # null ends a turn (bust or after stop): switch agent and roll fresh dice
             assert action.is_null()
             self.wait_for_go = False
+            self.end_turn = False
             self.cur_agent_idx = (self.cur_agent_idx + 1) % self.num_agents
             self.tmp_track = []
             self.tmp_progress = []
             self.roll_dice()
             reward[self.cur_agent_idx] += R_NULL
             return self, reward
-        
+
         if self.wait_for_go:
             # 'go' or 'stop' action is expected
             assert action.is_go() or action.is_stop()
@@ -119,10 +122,8 @@ class State:
                                     reward[j] += R_LOSE
                         self.track_state[track_idx] = [0 for _ in range(self.num_agents)]
                         self.track_state[track_idx][self.cur_agent_idx] = progress
-                self.tmp_track = []
-                self.tmp_progress = []
-                self.cur_agent_idx = (self.cur_agent_idx + 1) % self.num_agents
-                self.roll_dice()
+                # end the turn via a following 'null' (unless this stop won -> terminal)
+                self.end_turn = True
             self.wait_for_go = False
             return self, reward
         
@@ -154,6 +155,8 @@ class State:
 
     def get_legal_actions(self):
         if self.is_terminal():
+            return [Action('null')]
+        if self.end_turn:
             return [Action('null')]
         if self.wait_for_go:
             return [Action('go'), Action('stop')]
@@ -191,6 +194,7 @@ class State:
         s += f'score: {self.score}\n'
         s += f'cur_agent: {self.cur_agent_idx}\n'
         s += f'wait_for_go: {self.wait_for_go}\n'
+        s += f'end_turn: {self.end_turn}\n'
         s += f'tmp_track: {self.tmp_track}\n'
         s += f'tmp_progress: {self.tmp_progress}\n'
         s += f'legal_actions: {self.get_legal_actions()}\n'
