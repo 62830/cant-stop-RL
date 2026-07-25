@@ -88,7 +88,7 @@ class State:
         R_WIN = 1
         R_LOSE = -1
         R_NULL = 0
-        R_COLUMN = 0.1
+        R_COLUMN = 0  # subsumed by the potential-based shaping in episode_to_transitions
 
         if self.get_legal_actions()[0].is_null():
             # have to make null move when no valid action after 'go'
