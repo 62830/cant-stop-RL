@@ -141,25 +141,68 @@ class ExpectimaxAgent:
         self.episode.clear()
         
 class MixedAgent:
-    def __init__(self, agents, verbose = False):
+    # An opponent that samples one member per episode by weight. Members keep their
+    # own (frozen) weights -- load_weights is intentionally a no-op so the league
+    # can't be overwritten by an opponent-sync call.
+    def __init__(self, agents, weights=None, verbose=False):
         self.agents = agents
+        self.weights = weights if weights is not None else [1.0] * len(agents)
+        assert len(self.weights) == len(self.agents)
         self.verbose = verbose
-        self.agent_idx = 0
+        self.cur = 0
+        self._sample()
 
-    def act(self, state, reward, done):
-        agent = self.agents[self.agent_idx]
-        action = agent.act(state, reward, done)
+    def _sample(self):
+        self.cur = random.choices(range(len(self.agents)), weights=self.weights, k=1)[0]
+
+    def act(self, state, reward, done, deterministic=False):
+        agent = self.agents[self.cur]
+        try:
+            action = agent.act(state, reward, done, deterministic=deterministic)
+        except TypeError:
+            action = agent.act(state, reward, done)  # heuristics without deterministic kwarg
         if self.verbose:
-            print(f'agent {self.agent_idx} action: {action}')
+            print(f'member {self.cur} action: {action}')
         return action
 
     def reset(self):
-        self.agents[self.agent_idx].reset()
-        self.agent_idx = (self.agent_idx + 1) % len(self.agents)
+        self.agents[self.cur].reset()
+        self._sample()
 
     def load_weights(self, weights):
-        for agent in self.agents:
-            if hasattr(agent, 'load_weights'):
-                agent.load_weights(weights)
+        pass  # members are frozen; do not broadcast
+
+
+def build_opponent_pool(model_factory, self_weights, heuristics=None, heuristic_frac=0.0, verbose=False):
+    # Nash-preserving opponent mixture for self-play.
+    #
+    # self_weights: list of frozen learner checkpoints (recent + past). The pool is
+    # dominated by these (fictitious self-play), which is what lets self-play move
+    # toward the game's Nash equilibrium; uniform-over-past has the cleanest
+    # average-strategy convergence, recency-skew trains faster but can cycle.
+    #
+    # heuristics (list of fixed agents e.g. random / v2) get only heuristic_frac of
+    # the mass, annealed toward 0. A Nash policy already beats them, so as their
+    # weight -> 0 the best-response fixed point coincides with Nash; a little mass
+    # just aids coverage and stops the learner forgetting how to punish weak play.
+    # heuristic_frac=0 => strict fictitious self-play.
+    heuristics = heuristics or []
+    assert self_weights, 'need at least one self checkpoint'
+    if not heuristics:
+        heuristic_frac = 0.0
+
+    members, weights = [], []
+    self_mass = (1.0 - heuristic_frac) / len(self_weights)
+    for w in self_weights:
+        a = RLAgent(model_factory())
+        a.load_weights(w)
+        members.append(a)
+        weights.append(self_mass)
+    if heuristics:
+        h_mass = heuristic_frac / len(heuristics)
+        for h in heuristics:
+            members.append(h)
+            weights.append(h_mass)
+    return MixedAgent(members, weights=weights, verbose=verbose)
 
 
