@@ -28,7 +28,21 @@ class HumanAgent:
     def reset(self):
         pass
 
-def episode_to_transitions(episode, gamma=0.99, lam=0.95):
+def potential(state, coef=1.0):
+    # top-3 banked-progress differential, from the current agent's POV, in [-coef, coef].
+    # potential-based shaping (F = gamma*Phi(s') - Phi(s)) leaves the optimum/Nash unchanged.
+    if state.is_terminal():
+        return 0.0  # required by PBRS: zero at terminal
+    me = state.get_cur_agent_idx()
+    opp = 1 - me
+    ts = state.get_track_state()
+    tl = state.get_track_len()
+    def top3(p):
+        fracs = sorted((ts[c][p] / tl[c] for c in range(len(tl)) if tl[c] > 0), reverse=True)
+        return sum(fracs[:3])
+    return coef * (top3(me) - top3(opp)) / 3.0
+
+def episode_to_transitions(episode, gamma=0.99, lam=0.95, shaping_coef=1.0):
     # episode is a list of (s, a, a_prob, v, r, done)
     # transitions need (s, a, a_prob, v, s', done, adv)
 
@@ -37,6 +51,9 @@ def episode_to_transitions(episode, gamma=0.99, lam=0.95):
     for i in reversed(range(len(episode) - 1)):
         state, action, action_prob, value, _, _ = episode[i]
         next_state, _, _, next_value, reward, done = episode[i + 1]
+        phi_s = potential(state, shaping_coef)
+        phi_ns = 0.0 if done else potential(next_state, shaping_coef)
+        reward = reward + gamma * phi_ns - phi_s
         delta = reward + gamma * next_value * (1 - done) - value
         advantage = delta + gamma * lam * advantage * (1 - done)
         transitions.append((state, action, action_prob, value, next_state, done, advantage))
