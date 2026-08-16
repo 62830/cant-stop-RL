@@ -24,16 +24,17 @@ def _rollout_worker(task):
     # records transitions, so the buffer stays on-policy (see fix #1).
     import torch
     torch.set_num_threads(1)  # batch-1 inference is faster single-threaded; avoids oversubscription across workers
-    from agents import RLAgent
+    from agents import RLAgent, build_opponent_pool
     from game import RLGame
     from transition_buffer import TransitionBuffer
 
-    model_cls, weights_learner, weights_opponent, learner_first, n_episodes = task
+    model_cls, weights_learner, opponent_paths, learner_first, n_episodes = task
     buffer = TransitionBuffer()
     learner = RLAgent(model_cls(STATE_LEN, ACTION_LEN), transition_buffer=buffer)
-    opponent = RLAgent(model_cls(STATE_LEN, ACTION_LEN))
     learner.model.load_weights(weights_learner)
-    opponent.model.load_weights(weights_opponent)
+    # The pool is built per worker (checkpoints are read from disk, so only the
+    # paths cross the process boundary) and resamples a member on every reset().
+    opponent = build_opponent_pool(model_cls, opponent_paths)
 
     players = [learner, opponent]
     if not learner_first:
@@ -44,14 +45,19 @@ def _rollout_worker(task):
         wins = wins[::-1]
     return wins, list(buffer)
 
-def run_game_parallel(model_cls, weights_learner, weights_opponent, swap_first=False, num_episodes=1000, num_workers=8):
+def run_game_parallel(model_cls, weights_learner, opponent_paths, swap_first=False, num_episodes=1000, num_workers=8):
     # Fan the rollout out over num_workers processes and merge the results.
+    # opponent_paths: checkpoint paths forming the opponent mixture (one member is
+    # sampled per episode). A single path == a single frozen opponent.
     # Returns (total_wins, transitions) where transitions come from the learner only.
+
+    if isinstance(opponent_paths, str):
+        opponent_paths = [opponent_paths]
 
     def build_tasks(episodes, learner_first, workers):
         per = episodes // workers
         rem = episodes % workers
-        tasks = [(model_cls, weights_learner, weights_opponent, learner_first, per + (1 if i < rem else 0))
+        tasks = [(model_cls, weights_learner, opponent_paths, learner_first, per + (1 if i < rem else 0))
                 for i in range(workers)]
         tasks = [t for t in tasks if t[4] > 0]
         return tasks
