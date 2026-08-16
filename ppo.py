@@ -80,10 +80,10 @@ def one_epoch(agent, buffer, optimizer, batch_size=64, num_steps=10, dev='cpu'):
     avg_clip_frac = np.mean(logging['clip_frac'])
     print(f'Policy Loss: {avg_policy_loss:.4f}, Value Loss: {avg_value_loss:.4f}, Entropy: {avg_entropy:.4f}, Clip Fraction: {avg_clip_frac:.4f}')
 
-def train_rl_agent(weight_path=None, lr=3e-4, num_epoch=10, num_episodes=100, batch_size=64, num_steps=100, dev='cpu', version='v1', num_workers=8):
+def train_rl_agent(weight_path=None, lr=3e-4, num_epoch=10, num_episodes=100, batch_size=64, num_steps=100, dev='cpu', version='v1', num_workers=8, opponent_pool_size=1):
     # model_cls = SepModel
-    # model_cls = SmallModel
-    model_cls = LargeModel
+    model_cls = SmallModel
+    # model_cls = LargeModel
     ppo_agent = RLAgent(model_cls(STATE_LEN, ACTION_LEN))
     if weight_path:
         ppo_agent.model.load_path(weight_path)
@@ -91,45 +91,57 @@ def train_rl_agent(weight_path=None, lr=3e-4, num_epoch=10, num_episodes=100, ba
     optimizer = optim.Adam(ppo_agent.model.parameters(), lr=lr)
     buffer = TransitionBuffer()
 
-    # rollout_agents hold the two self-play policies: agent 0 is the learner,
-    # agent 1 is the frozen opponent. only the learner's transitions are collected (on-policy).
-    rollout_agents = [
-        RLAgent(model_cls(STATE_LEN, ACTION_LEN)),
-        RLAgent(model_cls(STATE_LEN, ACTION_LEN))
-    ]
-    # first agent updates quickly,
-    # second agent updates only when first agent beats it more than 60% of the time
+    rollout_learner = RLAgent(model_cls(STATE_LEN, ACTION_LEN))
+    rollout_learner.load_weights(ppo_agent.model.save_weights())
 
-    for rollout_agent in rollout_agents:
-        rollout_agent.load_weights(ppo_agent.model.save_weights())
+    checkpoint_paths = []
+    def save_checkpoint(epoch):
+        path = f'model_weights/rl_agent_{version}_{epoch}.pth'
+        rollout_learner.model.save_path(path)
+        checkpoint_paths.append(path)
+        return path
 
+    save_checkpoint(0)
 
     for epoch in range(num_epoch):
+        # 400 episodes for training against mixed agents
+        # 400 episodes for checkpoint promotion
         print(f'Epoch {epoch + 1}/{num_epoch}')
         buffer.clear()
-        wins, transitions = run_game_parallel(
+        opponent_paths = checkpoint_paths[-opponent_pool_size:]
+        wins , transitions = run_game_parallel(
             model_cls,
-            rollout_agents[0].model.save_weights(),
-            rollout_agents[1].model.save_weights(),
+            rollout_learner.model.save_weights(),
+            opponent_paths,
             swap_first=True,
             num_episodes=num_episodes,
             num_workers=num_workers,
         )
         for transition in transitions:
             buffer.add(transition)
-        print(f'Buffer size: {len(buffer)} Average episode length: {(len(buffer) / num_episodes):.2f} First agent wins: {wins[0]}, Second agent wins: {wins[1]}')
+        print(f'Buffer size: {len(buffer)} Average episode length: {(len(buffer) / num_episodes):.2f} Learner wins: {wins[0]}, Pool wins: {wins[1]} (pool: {[p.split("_")[-1] for p in opponent_paths]})')
+
+        latest_checkpoint_path = checkpoint_paths[-1:]
+        wins, _ = run_game_parallel(
+            model_cls,
+            rollout_learner.model.save_weights(),
+            latest_checkpoint_path,
+            swap_first=True,
+            num_episodes=num_episodes,
+            num_workers=num_workers,
+        )
+        print(f'Win against latest checkpoint: {wins}')
         if wins[0] >= 0.56 * num_episodes:
-            print(f'Update second agent weights at epoch {epoch + 1}')
-            rollout_agents[1].load_weights(rollout_agents[0].model.save_weights())
-            rollout_agents[0].model.save_path(f'model_weights/rl_agent_{version}_{epoch + 1}.pth')
-            test(rollout_agents[0], deterministic=True)
+            print(f'Add checkpoint to opponent pool at epoch {epoch + 1}')
+            save_checkpoint(epoch + 1)
+            test(rollout_learner, deterministic=True)
 
         one_epoch(ppo_agent, buffer, optimizer, batch_size=batch_size, num_steps=num_steps, dev=dev)
 
-        rollout_agents[0].load_weights(ppo_agent.model.save_weights())
+        rollout_learner.load_weights(ppo_agent.model.save_weights())
 
 if __name__ == '__main__':
     device = 'cpu'
     # weight_path = 'model_weights/rl_agent_v8_677.pth'
     weight_path = None
-    train_rl_agent(weight_path=weight_path, lr=3e-4, num_epoch=10000, num_episodes=400, batch_size=256, num_steps=300, dev=device, version='v17', num_workers=12)
+    train_rl_agent(weight_path=weight_path, lr=3e-4, num_epoch=10000, num_episodes=400, batch_size=256, num_steps=300, dev=device, version='v19', num_workers=12, opponent_pool_size=5)

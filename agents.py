@@ -1,5 +1,6 @@
 import random
 from game import Action, State
+from util import STATE_LEN, ACTION_LEN
 import copy
 import itertools
 
@@ -59,6 +60,8 @@ class RLAgent:
             self.episode.append((copy.deepcopy(state), action, action_prob, value, reward, done))
         return action
 
+    def load_path(self, path):
+        self.model.load_path(path)
     def load_weights(self, weights):
         self.model.load_weights(weights)
     
@@ -129,6 +132,8 @@ class ExpectimaxAgent:
             self.episode.append((copy.deepcopy(state), action, action_prob, value, reward, done))
         return action
 
+    def load_path(self, path):
+        self.model.load_path(path)
     def load_weights(self, weights):
         self.model.load_weights(weights)
     
@@ -141,25 +146,42 @@ class ExpectimaxAgent:
         self.episode.clear()
         
 class MixedAgent:
-    def __init__(self, agents, verbose = False):
+    def __init__(self, agents, verbose=False):
         self.agents = agents
         self.verbose = verbose
-        self.agent_idx = 0
+        self.cur = 0
+        self._sample()
 
-    def act(self, state, reward, done):
-        agent = self.agents[self.agent_idx]
-        action = agent.act(state, reward, done)
+    def _sample(self):
+        self.cur = random.randint(0, len(self.agents)-1)
+
+    def act(self, state, reward, done, deterministic=False):
+        agent = self.agents[self.cur]
+        action = agent.act(state, reward, done, deterministic=deterministic)
         if self.verbose:
-            print(f'agent {self.agent_idx} action: {action}')
+            print(f'member {self.cur} action: {action}')
         return action
 
     def reset(self):
-        self.agents[self.agent_idx].reset()
-        self.agent_idx = (self.agent_idx + 1) % len(self.agents)
+        self.agents[self.cur].reset()
+        self._sample()
 
+    def load_path(self, path):
+        pass
     def load_weights(self, weights):
-        for agent in self.agents:
-            if hasattr(agent, 'load_weights'):
-                agent.load_weights(weights)
+        pass
+
+
+def build_opponent_pool(model_cls, weight_paths, verbose=False):
+    # Opponent mixture over frozen checkpoints of the learner (fictitious self-play).
+    # weight_paths is ordered oldest -> newest; every member gets equal mass, so a
+    # single path degenerates to the classic "one frozen opponent" setup.
+    assert weight_paths, 'need at least one checkpoint to build an opponent pool'
+    members = []
+    for path in weight_paths:
+        a = RLAgent(model_cls(STATE_LEN, ACTION_LEN))
+        a.load_path(path)
+        members.append(a)
+    return MixedAgent(members, verbose=verbose)
 
 
