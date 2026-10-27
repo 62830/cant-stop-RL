@@ -20,12 +20,26 @@ def features(progs, m, kind):
         return np.stack([_top3(me) - _top3(op), (me == 1).sum(1) - (op == 1).sum(1)], 1).astype(np.float64)
     raise ValueError(kind)
 
+def features_mixed(progs, ms, kind):
+    # per-row to_move ms (int array)
+    progs, ms = np.asarray(progs), np.asarray(ms)
+    X = np.empty((len(ms), 2 if kind == 'claim_top3' else 1))
+    for q in (0, 1):
+        X[ms == q] = features(progs[ms == q], q, kind)
+    return X
+
 class VH:
     def __init__(self, kind='top3', theta=(4.0,), bias=0.0):
         self.kind, self.theta, self.bias = kind, np.asarray(theta, np.float64), float(bias)
 
+    def _p(self, X):
+        return 1 / (1 + np.exp(-(X @ self.theta + self.bias)))
+
     def __call__(self, progs, m):
-        return 1 / (1 + np.exp(-(features(progs, m, self.kind) @ self.theta + self.bias)))
+        return self._p(features(progs, m, self.kind))
+
+    def mixed(self, progs, ms):
+        return self._p(features_mixed(progs, ms, self.kind))
 
     def __repr__(self):
         return f'VH({self.kind!r}, theta={self.theta.round(4).tolist()}, bias={self.bias:.4f})'
@@ -44,6 +58,9 @@ def fit(X, y, l2=1e-6, iters=50):
             break
     return w[:-1], w[-1]
 
-def log_loss(p, y):
+def nll(p, y):
     p = np.clip(p, 1e-12, 1 - 1e-12)
-    return float(-np.mean(y * np.log(p) + (1 - y) * np.log(1 - p)))
+    return -(y * np.log(p) + (1 - y) * np.log(1 - p))
+
+def log_loss(p, y):
+    return float(np.mean(nll(p, y)))

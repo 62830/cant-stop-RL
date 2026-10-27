@@ -1,4 +1,4 @@
-import os, sys, json, time, random
+import os, sys, json, time, random, hashlib
 from functools import partial
 from multiprocessing import Pool
 import numpy as np
@@ -8,7 +8,7 @@ import fastrules as fr
 from game import State
 from baselines import V2, V2Tuned
 from eval import evaluate, wilson
-from heuristics import VH, KINDS, features, fit, log_loss
+from heuristics import VH, KINDS, features_mixed, fit, log_loss, nll
 from solver_agent import SolverAgent
 
 OUT = os.path.join(ROOT, 'runs', 'phase3')
@@ -53,8 +53,12 @@ def _selfplay(args):
             progs.append(prog), ms.append(p), ys.append(p == w), gs.append(g0 + g)
     return np.array(progs), np.array(ms), np.array(ys, float), np.array(gs)
 
-def selfplay(v, n, seed, name):
-    path = os.path.join(CACHE, name + '.npz')
+def cache_path(v, n, seed):
+    key = json.dumps([v.kind, v.theta.tolist(), v.bias, n, seed])
+    return os.path.join(CACHE, hashlib.sha1(key.encode()).hexdigest()[:16] + '.npz')
+
+def selfplay(v, n, seed):
+    path = cache_path(v, n, seed)
     if not os.path.exists(path):
         chunks = 16
         jobs = [(partial(SolverAgent, v), n // chunks + (i < n % chunks), seed * 1000 + i, i * 100000) for i in range(chunks)]
@@ -64,39 +68,32 @@ def selfplay(v, n, seed, name):
     d = np.load(path)
     return d['progs'], d['m'], d['y'], d['g']
 
-def feats(progs, m, kind):
-    X = np.empty((len(m), 2 if kind == 'claim_top3' else 1))
-    for q in (0, 1):
-        X[m == q] = features(progs[m == q], q, kind)
-    return X
-
-def predict(v, progs, m):
-    return 1 / (1 + np.exp(-(feats(progs, m, v.kind) @ v.theta + v.bias)))
+def test_mask(g, seed=0):
+    games = np.unique(g)
+    return np.isin(g, np.random.default_rng(seed).choice(games, len(games) // 5, replace=False))
 
 def ece(p, y, bins=10):
     idx = np.minimum((p * bins).astype(int), bins - 1)
     return float(sum(abs(p[idx == b].mean() - y[idx == b].mean()) * (idx == b).mean() for b in range(bins) if (idx == b).any()))
 
-def fit_round(data, rng_seed=0):
+def fit_round(data):
     progs, m, y, g = data
-    games = np.unique(g)
-    test_games = np.random.default_rng(rng_seed).choice(games, len(games) // 5, replace=False)
-    te = np.isin(g, test_games)
-    out = {'n_games': int(len(games)), 'n_train': int((~te).sum()), 'n_test': int(te.sum()),
+    te = test_mask(g)
+    out = {'n_games': int(len(np.unique(g))), 'n_train': int((~te).sum()), 'n_test': int(te.sum()),
            'base_rate_to_move': float(y.mean()), 'prior_logloss': log_loss(np.full(te.sum(), y[~te].mean()), y[te]), 'fits': {}}
     preds = {}
     for kind in KINDS:
-        theta, b = fit(feats(progs[~te], m[~te], kind), y[~te])
+        theta, b = fit(features_mixed(progs[~te], m[~te], kind), y[~te])
         v = VH(kind, theta, b)
-        p = predict(v, progs[te], m[te])
+        p = v.mixed(progs[te], m[te])
         preds[kind] = p
         out['fits'][kind] = {'kind': kind, 'theta': theta.tolist(), 'bias': float(b), 'test_logloss': log_loss(p, y[te]),
-                             'test_ece': ece(p, y[te]), 'train_logloss': log_loss(predict(v, progs[~te], m[~te]), y[~te])}
+                             'test_ece': ece(p, y[te]), 'train_logloss': log_loss(v.mixed(progs[~te], m[~te]), y[~te])}
     # game-clustered bootstrap CI of each candidate's log-loss minus the best one's
     best = min(KINDS, key=lambda k: out['fits'][k]['test_logloss'])
     tg, inv = np.unique(g[te], return_inverse=True)
     rng = np.random.default_rng(1)
-    ll = {k: -(y[te] * np.log(preds[k]) + (1 - y[te]) * np.log(1 - preds[k])) for k in KINDS}
+    ll = {k: nll(preds[k], y[te]) for k in KINDS}
     sums = {k: np.bincount(inv, ll[k]) for k in KINDS}
     cnt = np.bincount(inv)
     boots = {k: [] for k in KINDS}
@@ -110,7 +107,7 @@ def fit_round(data, rng_seed=0):
         out['fits'][k]['diff_vs_best_ci'] = np.percentile(b - np.array(boots[best]), [2.5, 97.5]).tolist()
     out['best'] = best
     out['ranking'] = sorted(KINDS, key=lambda k: out['fits'][k]['test_logloss'])
-    return out, te
+    return out
 
 def reliability(p, y, bins=10):
     idx = np.minimum((p * bins).astype(int), bins - 1)
@@ -142,11 +139,11 @@ def main():
     os.makedirs(CACHE, exist_ok=True)
     res = load()
     res['guess'] = {'kind': GUESS.kind, 'theta': GUESS.theta.tolist(), 'bias': GUESS.bias}
-    r1 = stage(res, 'round1', lambda: fit_round(selfplay(GUESS, N_SELF, 1, 'round1'))[0])
+    r1 = stage(res, 'round1', lambda: fit_round(selfplay(GUESS, N_SELF, 1)))
     v1 = vh(r1['fits'][r1['best']])
     res['round2_policy'] = r1['fits'][r1['best']]
-    d2 = selfplay(v1, N_SELF, 2, 'round2')
-    r2 = stage(res, 'round2', lambda: fit_round(d2)[0])
+    d2 = selfplay(v1, N_SELF, 2)
+    r2 = stage(res, 'round2', lambda: fit_round(d2))
     top = r2['ranking'][:2]
     va, vb = vh(r2['fits'][top[0]]), vh(r2['fits'][top[1]])
     h2h = stage(res, 'h2h', lambda: {'a': top[0], 'b': top[1], **ev(partial(SolverAgent, va), partial(SolverAgent, vb), N_H2H, 3)})
@@ -172,14 +169,12 @@ def main():
     stage(res, 'h2h_best_vs_guess', lambda: ev(S, partial(SolverAgent, GUESS), N_H2H, 7))
     stage(res, 'h2h_sharp_vs_guess', lambda: ev(partial(SolverAgent, sharp), partial(SolverAgent, GUESS), N_H2H, 7))
     # reliability on held-out round-2 games: fitted best vs the round-0 guess
-    _, te = fit_round(d2)
-    progs, m, y, _ = d2
-    res['reliability'] = {'best': reliability(predict(best, progs[te], m[te]), y[te]),
-                          'guess': reliability(predict(GUESS, progs[te], m[te]), y[te]),
-                          'best_ece': ece(predict(best, progs[te], m[te]), y[te]),
-                          'guess_ece': ece(predict(GUESS, progs[te], m[te]), y[te]),
-                          'guess_logloss': log_loss(predict(GUESS, progs[te], m[te]), y[te]),
-                          'hist': np.histogram(predict(best, progs[te], m[te]), 20, (0, 1))[0].tolist()}
+    progs, m, y, g = d2
+    te = test_mask(g)
+    pb, pg = best.mixed(progs[te], m[te]), GUESS.mixed(progs[te], m[te])
+    res['reliability'] = {'best': reliability(pb, y[te]), 'guess': reliability(pg, y[te]),
+                          'best_ece': ece(pb, y[te]), 'guess_ece': ece(pg, y[te]), 'guess_logloss': log_loss(pg, y[te]),
+                          'hist': np.histogram(pb, 20, (0, 1))[0].tolist()}
     save(res)
     plots(res)
 
@@ -201,7 +196,6 @@ def plots(res):
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
     plt.rcParams.update({'font.size': 10, 'text.color': INK, 'axes.labelcolor': INK2, 'figure.facecolor': SURF})
-    b = res['best']
     name = {'top3': 'top-3 progress diff', 'sum': 'sum-of-progress diff', 'claim_top3': 'top-3 diff + w·claimed diff'}
 
     # reliability
@@ -210,7 +204,7 @@ def plots(res):
     _ax(ax), _ax(axh)
     ax.plot([0, 1], [0, 1], color=NEUTRAL, lw=1, ls='--', zorder=1)
     for key, col, lab in (('guess', S2, f"initial guess c={res['guess']['theta'][0]:g} (ECE {rel['guess_ece']:.3f})"),
-                          ('best', S1, f"fitted {name[b['kind']]} (ECE {rel['best_ece']:.3f})")):
+                          ('best', S1, f"fitted {name[res['best']['kind']]} (ECE {rel['best_ece']:.3f})")):
         r = rel[key]
         x, o = [q['pred'] for q in r], [q['obs'] for q in r]
         ax.errorbar(x, o, yerr=[[q['obs'] - q['lo'] for q in r], [q['hi'] - q['obs'] for q in r]], color=col, lw=2,
@@ -254,8 +248,8 @@ def plots(res):
             ('solver, best V_h (exact)', res['gate_vs_v2'], S1),
             ('solver go/stop + v2 picks', res['abl_v2_picks'], S1),
             ('v2 go/stop + solver picks', res['abl_v2_gostop'], S1),
-            ('solver depth k=2', res['abl_depth2'], S1),
-            ('solver depth k=4', res['abl_depth4'], S1)][::-1]
+            ('receding horizon k=2', res['abl_depth2'], S1),
+            ('receding horizon k=4', res['abl_depth4'], S1)][::-1]
     fig, ax = plt.subplots(figsize=(7, 3.8))
     _ax(ax)
     ax.grid(axis='y', visible=False)

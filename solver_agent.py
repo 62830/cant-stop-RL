@@ -10,7 +10,8 @@ def tmp_of(track, progress):
     return t
 
 class SolverAgent:
-    # solves each turn once (re-solving from the current tmp when a depth-limited horizon is reached);
+    # solves each turn once, re-solving from the current tmp when its row wasn't expanded (missing, horizon, win leaf);
+    # depth k makes it a receding-horizon agent: picks are scored against horizon stop values, then it re-solves there.
     # v2_picks / v2_gostop delegate that decision to v2 (ablations)
     def __init__(self, value_fn, depth=None, v2_picks=False, v2_gostop=False):
         self.value_fn, self.depth, self.v2_picks, self.v2_gostop = value_fn, depth, v2_picks, v2_gostop
@@ -25,7 +26,7 @@ class SolverAgent:
         board = (prog.tobytes(), p)
         k = fr.key(tmp)
         s = self.sol
-        if s is None or board != self.board or k not in s.index or s.depth[s.index[k]] == s.limit:
+        if s is None or board != self.board or k not in s.index or np.isnan(s.go[s.index[k]]):
             self.sol = solve_turn(prog, p, self.value_fn, self.depth, tmp if k else None)
             self.board = board
             self.n_solves += 1
@@ -42,4 +43,6 @@ class SolverAgent:
         sol = self.solution(prog, p, tmp)
         if go:
             return Action('go') if sol.should_go(tmp) else Action('stop')
+        if np.isnan(sol.go[sol.row(tmp)]):
+            return legal[0]  # going on from a winning stop (delegated go): every pick still wins
         return max(legal, key=lambda a: sol.value(tmp_of(*state.unsafe_pick(a))))
