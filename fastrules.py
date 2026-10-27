@@ -1,3 +1,4 @@
+import random
 import numpy as np
 from itertools import product
 from numba import njit, types
@@ -145,7 +146,7 @@ def apply_stop(prog, p, tmp):
 
 @njit(cache=True)
 def enumerate_turn(prog, p):
-    # BFS over rolls x picks from the empty tmp; returns keys (BFS order) and roll depth at first discovery
+    # BFS over rolls x picks from the empty tmp; returns keys (BFS order), roll depth at first discovery, key -> row
     seen = Dict.empty(types.int64, types.int64)
     keys, depth = List.empty_list(types.int64), List.empty_list(types.int64)
     seen[0] = 0
@@ -169,10 +170,11 @@ def enumerate_turn(prog, p):
                         keys.append(k)
                         depth.append(depth[i] + 1)
         i += 1
-    return np.asarray(keys), np.asarray(depth)
+    return np.asarray(keys), np.asarray(depth), seen
 
 def from_state(s):
     # game.State -> (prog, player, tmp)
+    assert s.num_agents == 2
     prog = np.zeros((2, 13), np.int8)
     for c in range(2, 13):
         prog[:, c] = s.track_state[c]
@@ -181,8 +183,11 @@ def from_state(s):
         tmp[c] = h
     return prog, s.cur_agent_idx, tmp
 
-def to_state(prog, p, tmp=None, dice=None):
+def to_state(prog, p, tmp=None, dice=None, wait_for_go=False):
+    rs = random.getstate()
     s = State()
+    random.setstate(rs)
+    s.wait_for_go = wait_for_go
     s.cur_agent_idx = int(p)
     s.track_state = [[int(prog[0, c]), int(prog[1, c])] for c in range(13)]
     s.score = [int(score(prog, q)) for q in range(2)]
