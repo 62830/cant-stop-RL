@@ -5,12 +5,15 @@ import fastrules as fr
 # value_fn(progs int8[n, 2, 13], to_move) -> float64[n]: P(to_move wins) at the start of to_move's turn
 
 class Solution:
-    def __init__(self, prog, p, keys, depth, index, best, stop, go, pbust, bust_val):
-        self.prog, self.p, self.keys, self.depth, self.index = prog, p, keys, depth, index
+    def __init__(self, prog, p, limit, keys, depth, index, best, stop, go, pbust, bust_val):
+        self.prog, self.p, self.limit, self.keys, self.depth, self.index = prog, p, limit, keys, depth, index
         self.best, self.stop, self.go, self.pbust, self.bust_val = best, stop, go, pbust, bust_val
 
     def row(self, tmp):
-        return self.index[fr.key(tmp)]
+        k = fr.key(tmp)
+        if k not in self.index:
+            raise ValueError(f'situation {tmp.tolist()} is outside the solved turn (horizon {self.limit}); re-solve with tmp=')
+        return self.index[k]
 
     def value(self, tmp):
         return self.best[self.row(tmp)]
@@ -40,8 +43,9 @@ def _fill(prog, p, keys, depth, index, stop, bust_val, limit):
                 adv[i] += t[c] - prog[p, c]
     best, go, pbust = stop.copy(), np.full(n, np.nan), np.full(n, np.nan)
     cv = np.empty((13, 13))
+    mv = np.empty((fr.MAX_PICKS, 2), np.int8)
     for i in np.argsort(-adv):
-        if depth[i] == limit:
+        if depth[i] == limit or stop[i] >= 1.0:
             continue
         t = fr.decode(keys[i])
         ok = fr.legal_moves(prog, p, t)
@@ -49,15 +53,11 @@ def _fill(prog, p, keys, depth, index, stop, bust_val, limit):
         g = pb = 0.0
         for r in range(fr.N_ROLLS):
             v = -1.0
-            for j in range(fr.ROLL_NPAIRS[r]):
-                a, b = np.int64(fr.ROLL_PAIRS[r, j, 0]), np.int64(fr.ROLL_PAIRS[r, j, 1])
-                for x, y in ((a, b), (a, 0), (b, 0)):
-                    if ok[x, y]:
-                        if cv[x, y] < 0:
-                            cv[x, y] = best[index[fr.move_key(prog, p, t, keys[i], x, y)]]
-                        v = max(v, cv[x, y])
-                        if y == b:
-                            break
+            for j in range(fr.roll_moves(ok, r, mv)):
+                a, b = mv[j, 0], mv[j, 1]
+                if cv[a, b] < 0:
+                    cv[a, b] = best[index[fr.move_key(prog, p, t, keys[i], a, b)]]
+                v = max(v, cv[a, b])
             if v < 0:
                 pb += fr.ROLL_PROB[r]
                 v = bust_val
@@ -67,7 +67,9 @@ def _fill(prog, p, keys, depth, index, stop, bust_val, limit):
     return best, go, pbust
 
 def solve_turn(prog, p, value_fn, depth=None, tmp=None):
-    # solves the rest of the turn from tmp (default: turn start); depth k: situations k rolls away must stop
+    # solves the rest of the turn from tmp (default: turn start); winning stops are not expanded
+    # depth k: min-roll-distance horizon, situations first reachable in k rolls must stop (a realizable policy, so a
+    # lower bound, monotone in k; exact once k > max distance). From the empty tmp k is raised to 1 (it can't stop).
     k0 = 0 if tmp is None else fr.key(tmp)
     limit = -1 if depth is None else max(depth, int(k0 == 0))
     keys, dep, index = fr.enumerate_turn(prog, p, limit, k0)
@@ -78,15 +80,16 @@ def solve_turn(prog, p, value_fn, depth=None, tmp=None):
     stop[ask] = 1 - v[:-1]
     bust_val = 1 - v[-1]
     best, go, pbust = _fill(prog, p, keys, dep, index, stop, bust_val, limit)
-    return Solution(prog, p, keys, dep, index, best, stop, go, pbust, bust_val)
+    return Solution(prog, p, limit, keys, dep, index, best, stop, go, pbust, bust_val)
 
 def best_move(sol, tmp, roll):
     # roll: 4 dice or a roll index; returns (move (a, b), new tmp) maximizing best, or None on a bust
+    if sol.depth[sol.row(tmp)] == sol.limit:
+        raise ValueError(f'situation {tmp.tolist()} is on the depth-{sol.limit} horizon (forced stop); re-solve with tmp=')
     r = roll if np.isscalar(roll) else fr.roll_index(roll)
     mv = np.empty((fr.MAX_PICKS, 2), np.int8)
     n = fr.roll_moves(fr.legal_moves(sol.prog, sol.p, tmp), r, mv)
     if n == 0:
         return None
-    k = fr.key(tmp)
-    a, b = max(mv[:n], key=lambda m: sol.best[sol.index[fr.move_key(sol.prog, sol.p, tmp, k, m[0], m[1])]])
-    return (a, b), fr.apply_move(sol.prog, sol.p, tmp, a, b)
+    outs = [((int(a), int(b)), fr.apply_move(sol.prog, sol.p, tmp, a, b)) for a, b in mv[:n]]
+    return max(outs, key=lambda o: sol.value(o[1]))

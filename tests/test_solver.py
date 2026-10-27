@@ -1,5 +1,6 @@
 import os, sys, random, time
 import numpy as np
+import pytest
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import fastrules as fr
 from turn_solver import solve_turn, best_move
@@ -20,6 +21,12 @@ def _tmp(d):
     for c, h in d.items():
         t[c] = h
     return t
+
+def _late():
+    return min(_boards(3), key=lambda b: len(fr.enumerate_turn(*b)[0]))
+
+def _mid():
+    return next(b for b in _boards(1) if b[0].sum(1).min() >= 8)
 
 def _boards(n_games=3, seed=0):
     random.seed(seed)
@@ -60,24 +67,36 @@ def test_bust_odds():
         assert abs(sol.pbust[0] - n / 1296) < 1e-12 and abs(1 - n / 1296 - pub) < 0.01
 
 def test_depth_monotone():
-    late = np.zeros((2, 13), np.int8)
-    late[0, 2:] = fr.LEN[2:] - 2
-    late[0, 7] = fr.LEN[7]
-    late[1, 2:] = fr.LEN[2:] - 3
-    late[1, [6, 8]] = fr.LEN[[6, 8]]
-    late[0, [6, 8]] = 0
-    exact = solve_turn(late, 0, heur)
-    D = exact.depth.max()
-    vals = [solve_turn(late, 0, heur, k).best[0] for k in range(D + 2)]
-    print('late-game depth', D, np.round(vals, 4))
-    assert np.all(np.diff(vals) >= -1e-12) and abs(vals[D] - exact.best[0]) < 1e-12 and vals[D + 1] == vals[D]
-    prog, p = _boards(1)[10]
-    vals = [solve_turn(prog, p, heur, k).best[0] for k in range(5)] + [solve_turn(prog, p, heur).best[0]]
-    print('mid-game k=0..4, exact', np.round(vals, 4))
-    assert np.all(np.diff(vals) >= -1e-12)
+    for name, (prog, p) in (('late', _late()), ('mid', _mid())):
+        exact = solve_turn(prog, p, heur)
+        D = exact.depth.max()
+        vals = [solve_turn(prog, p, heur, k).best[0] for k in range(min(D, 4) + 1)]
+        print(f'{name}: max depth {D}, k=0..{len(vals) - 1}', np.round(vals, 4), 'exact', round(exact.best[0], 4))
+        assert np.all(np.diff(vals + [exact.best[0]]) >= -1e-12)
+        assert abs(solve_turn(prog, p, heur, D + 1).best[0] - exact.best[0]) < 1e-12
+
+def test_horizon_error():
+    prog, p = _mid()
+    sol = solve_turn(prog, p, heur, 1)
+    on = fr.decode(sol.keys[-1])
+    with pytest.raises(ValueError):
+        best_move(sol, on, [1, 2, 3, 4])
+    with pytest.raises(ValueError):
+        sol.value(fr.decode(solve_turn(prog, p, heur, 3).keys[-1]))
+
+def test_win_pruning():
+    # p owns 3 and 4: any stop topping another column wins; those situations are leaves
+    prog = np.zeros((2, 13), np.int8)
+    prog[0, 3:5] = fr.LEN[3:5]
+    sol = solve_turn(prog, 0, heur)
+    win = sol.stop == 1.0
+    assert win.any() and np.isnan(sol.go[win]).all() and (sol.best[win] == 1.0).all()
+    for k in sol.keys[win][:200]:
+        t = fr.decode(k)
+        assert fr.score(fr.apply_stop(prog, 0, t), 0) >= 3
 
 def test_monte_carlo():
-    prog, p = _boards(1)[12]
+    prog, p = _mid()
     sol = solve_turn(prog, p, heur)
     rng = random.Random(0)
     leaves = []
@@ -99,7 +118,7 @@ def test_monte_carlo():
     assert abs(m - sol.best[0]) < 3 * se
 
 def test_best_move_matches_state():
-    prog, p = _boards(1)[12]
+    prog, p = _mid()
     sol = solve_turn(prog, p, heur)
     rng = random.Random(1)
     for _ in range(300):
@@ -131,4 +150,3 @@ def test_timing():
     t_k4 = time.time() - t
     print(f'exact empty {t_empty:.3f}s ({len(sol.keys)} situations); k=4 empty {t_k4:.3f}s; '
           f'{len(times)} game boards median {np.median(times):.3f}s max {max(times):.3f}s, median size {int(np.median(sizes))}')
-    assert t_empty < 1

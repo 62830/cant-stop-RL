@@ -146,7 +146,7 @@ def apply_stop(prog, p, tmp):
 
 @njit(cache=True)
 def enumerate_turn(prog, p, max_depth=-1, k0=0):
-    # BFS over rolls x picks from tmp k0 (default empty), stopping at roll depth max_depth (-1: none)
+    # BFS over rolls x picks from tmp k0 (default empty); nodes at roll depth max_depth (-1: none) or where stopping wins are not expanded
     # returns keys (BFS order), roll depth at first discovery, key -> row
     seen = Dict.empty(types.int64, types.int64)
     keys, depth = List.empty_list(types.int64), List.empty_list(types.int64)
@@ -157,6 +157,9 @@ def enumerate_turn(prog, p, max_depth=-1, k0=0):
     i = 0
     while i < len(keys) and depth[i] != max_depth:
         tmp = decode(keys[i])
+        if score(apply_stop(prog, p, tmp), p) >= 3:
+            i += 1
+            continue
         ok = legal_moves(prog, p, tmp)
         reach = np.zeros((13, 13), np.bool_)
         for r in range(N_ROLLS):
