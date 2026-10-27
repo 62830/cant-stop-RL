@@ -3,3 +3,4 @@
 log
 model_weights
 !requirements.txt
+__pycache__
