@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
 
 SURF, INK, INK2, GRID = '#fcfcfb', '#0b0b0b', '#52514e', '#e4e3df'
-S = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4']
+S = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948']  # fixed categorical order, never cycled
 
 def segments(path):
     segs, cfg = [], None
@@ -29,11 +29,13 @@ def smooth(y, k=5):
 
 def floor(s):
     third = s['it'] >= s['it'][0] + 2 * (s['it'][-1] - s['it'][0]) / 3
-    slope = np.polyfit(s['it'][third], s['r'][third], 1)[0]
-    return s['r'][-10:].mean(), s['r'][-10:].std(), slope * 100
+    slope = 100 * np.polyfit(s['it'][third], s['r'][third], 1)[0] if third.sum() >= 3 else None
+    return s['r'][-10:].mean(), s['r'][-10:].std(), slope
 
 def main(out, *paths):
     segs = [s for p in paths for s in segments(p)]
+    if len(segs) > len(S):
+        raise SystemExit(f'{len(segs)} segments > {len(S)} colours; compare fewer runs')
     fig, axs = plt.subplots(1, 2, figsize=(14, 5.5), facecolor=SURF)
     for ax, x, xl in ((axs[0], 'it', 'iteration'), (axs[1], 't', 'wall-clock (min, cumulative over resumes)')):
         ax.set_facecolor(SURF)
@@ -58,7 +60,7 @@ def main(out, *paths):
     print('segment | iters | minutes | floor (mean last 10 ± sd) | slope over last third (per 100 iters)')
     for s in segs:
         m, sd, sl = floor(s)
-        print(f"{s['label']} | {s['it'][0]}-{s['it'][-1]} | {s['t'][0]:.1f}-{s['t'][-1]:.1f} | {m:.5f} ± {sd:.5f} | {sl:+.5f}")
+        print(f"{s['label']} | {s['it'][0]}-{s['it'][-1]} | {s['t'][0]:.1f}-{s['t'][-1]:.1f} | {m:.5f} ± {sd:.5f} | {'n/a' if sl is None else f'{sl:+.5f}'}")
 
 if __name__ == '__main__':
     main(*sys.argv[1:])
