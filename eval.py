@@ -1,5 +1,5 @@
-import math
-import random
+import os, math, random
+os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
 from multiprocessing import Pool
 from game import Game
 
@@ -30,6 +30,29 @@ def evaluate(make_a, make_b, n=2000, workers=8, seed=0):
     with Pool(workers) as pool:
         wins = sum(pool.map(_play, jobs))
     return wins / n, wilson(wins, n)
+
+def _game(a, b, seed, a_first):
+    # 1 if A wins the game with dice seed `seed`
+    random.seed(seed)
+    a.reset()
+    b.reset()
+    score = Game([a, b] if a_first else [b, a]).play()
+    return float(score[0 if a_first else 1] >= 3)
+
+def _pairs(args):
+    make_a, make_b, seeds = args
+    a, b = make_a(), make_b()
+    return [(_game(a, b, g, True) + _game(a, b, g, False)) / 2 for g in seeds]
+
+def evaluate_paired(make_a, make_b, n=1000, workers=8, seed=0):
+    # n pairs: pair g plays dice seed g with A first, then the same seed with B first (identical decisions consume identical
+    # dice). Returns A's mean pair score (0 / 0.5 / 1 per pair) and a 95% normal CI over pairs
+    seeds = [seed * 1000003 + g for g in range(n)]
+    with Pool(workers) as pool:
+        s = [x for part in pool.map(_pairs, [(make_a, make_b, seeds[i::2 * workers]) for i in range(2 * workers)]) for x in part]
+    m = sum(s) / n
+    h = 1.96 * math.sqrt(sum((x - m) ** 2 for x in s) / max(n - 1, 1) / n)
+    return m, (m - h, m + h)
 
 if __name__ == '__main__':
     from baselines import RandomAgent, V2, V2Tuned

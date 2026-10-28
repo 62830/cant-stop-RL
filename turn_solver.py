@@ -5,9 +5,10 @@ import fastrules as fr
 # value_fn(progs int8[n, 2, 13], to_move) -> float64[n]: P(to_move wins) at the start of to_move's turn
 
 class Solution:
-    def __init__(self, prog, p, limit, keys, depth, index, best, stop, go, pbust, bust_val):
+    def __init__(self, prog, p, limit, keys, depth, index, best, stop, go, pbust, bust_val, child=None, order=None):
         self.prog, self.p, self.limit, self.keys, self.depth, self.index = prog, p, limit, keys, depth, index
         self.best, self.stop, self.go, self.pbust, self.bust_val = best, stop, go, pbust, bust_val
+        self.child, self.order = child, order  # the turn graph's child lists; rows children-first (see _order)
 
     def row(self, tmp):
         k = fr.key(tmp)
@@ -58,8 +59,8 @@ def stop_values(prog, p, value_fn, keys):
     return stop, 1 - v[-1]
 
 @njit(cache=True)
-def _fill(prog, p, keys, depth, child, stop, bust_val, limit):
-    # children advance >= 1, so visiting rows by decreasing total advance finalizes them before their parents
+def _order(prog, p, keys):
+    # rows by decreasing total advance: children advance >= 1, so each comes before its parents (reversed: parents first)
     n = len(keys)
     adv = np.zeros(n, np.int64)
     t = np.zeros(13, np.int8)
@@ -77,6 +78,12 @@ def _fill(prog, p, keys, depth, child, stop, bust_val, limit):
     for i in range(n):
         order[start[rank[i]]] = i
         start[rank[i]] += 1
+    return order
+
+@njit(cache=True)
+def _fill(prog, p, keys, depth, child, stop, bust_val, limit, order):
+    # visiting rows children-first finalizes them before their parents
+    n = len(keys)
     ptr, cmv, crow = child
     best, go, pbust = stop.copy(), np.full(n, np.nan), np.full(n, np.nan)
     sv, uv = np.empty(13), np.empty(len(fr.UPAIRS))
@@ -126,8 +133,9 @@ def solve_turn(prog, p, value_fn, depth=None, tmp=None):
     limit = -1 if depth is None else max(depth, int(k0 == 0))
     keys, dep, index, child = turn_graph(prog, p, limit, k0)
     stop, bust_val = stop_values(prog, p, value_fn, keys)
-    best, go, pbust = _fill(prog, p, keys, dep, child, stop, bust_val, limit)
-    return Solution(prog, p, limit, keys, dep, index, best, stop, go, pbust, bust_val)
+    order = _order(prog, p, keys)
+    best, go, pbust = _fill(prog, p, keys, dep, child, stop, bust_val, limit, order)
+    return Solution(prog, p, limit, keys, dep, index, best, stop, go, pbust, bust_val, child, order)
 
 def best_move(sol, tmp, roll):
     # roll: 4 dice or a roll index; returns (move (a, b), new tmp) maximizing best, or None on a bust
