@@ -38,7 +38,7 @@ def main(run='phase4', out=None):
     by = lambda k: [r for r in R if r['kind'] == k]
     it, up, cal, lad = by('iter'), by('update'), by('calib'), by('ladder')
     resumes = [r['iter'] for r in by('resume')]
-    fig, axs = plt.subplots(2, 3, figsize=(16, 9), facecolor=SURF)
+    fig, axs = plt.subplots(3, 3, figsize=(16, 13.5), facecolor=SURF)
     fig.suptitle(f'TD training dashboard: runs/{run}' + (f' (dotted: resumed at iter {resumes})' if resumes else ''), x=0.01, ha='left', color=INK, fontsize=14)
 
     ax = axs[0, 0]
@@ -86,7 +86,7 @@ def main(run='phase4', out=None):
         ax.errorbar(r['iter'] + 1.5, r['p'], [[r['p'] - r['lo']], [r['hi'] - r['p']]], color=c, marker='D', ms=7, capsize=3,
                     mec=SURF, mew=1.5, ls='none')
     ax.set_ylim(0.2, 1.0)
-    gate_n = '/'.join(str(n) for n in sorted({r['n'] for r in gate}, reverse=True))
+    gate_n = '/'.join(f"{n}{' pairs' if pr else ''}" for n, pr in sorted({(r['n'], r.get('paired', False)) for r in gate}, reverse=True))
     ax.legend(frameon=False, fontsize=8, labelcolor=INK2, loc='lower left', title=f'diamonds: final gate, n={gate_n}' if gate else None,
               title_fontsize=8)
 
@@ -116,6 +116,47 @@ def main(run='phase4', out=None):
     if it:
         ax.plot([r['iter'] for r in it], [r['solve_s'] for r in it], color=S[0], lw=2)
         ax.set_ylim(bottom=0)
+
+    sets = {'visited': S[0], 'end': S[1], 'close': S[2]}
+    ax = axs[2, 0]
+    style(ax, 'Residual mean |V - y| on the R7 sets (line: subset, dots: all rows)', 'iteration')
+    mark_resumes(ax, resumes)
+    rr = [r for r in it if r.get('resid_sets')]
+    if rr:
+        for k, c in sets.items():
+            label = k
+            for full in (False, True):
+                pts = [(r['iter'], r['resid_sets'][k]) for r in rr if k in r['resid_sets'] and bool(r.get('resid_full')) == full]
+                if pts:
+                    ax.plot(*zip(*pts), color=c, lw=0 if full else 2, marker='o', ms=6 if full else 0, label=label)
+                    label = None
+        ax.set_yscale('log')
+        plain(ax)
+        ax.legend(frameon=False, fontsize=8, labelcolor=INK2)
+
+    ax = axs[2, 1]
+    style(ax, 'New training pairs per iteration by source', 'iteration')
+    mark_resumes(ax, resumes)
+    rr = [r for r in it if r.get('pairs_src')]
+    if rr:
+        for k, c in sets.items():
+            ax.plot([r['iter'] for r in rr], [r['pairs_src'][k] for r in rr], color=c, lw=2, label=k)
+        ax.set_ylim(bottom=0)
+        ax.legend(frameon=False, fontsize=8, labelcolor=INK2)
+
+    ax = axs[2, 2]
+    style(ax, 'Close calls per turn start (line) and mean gap (dashed, right)', 'iteration')
+    mark_resumes(ax, resumes)
+    rr = [r for r in it if r.get('close_per_turn') is not None]
+    if rr:
+        x = [r['iter'] for r in rr]
+        ax.plot(x, [r['close_per_turn'] for r in rr], color=S[0], lw=2)
+        ax.set_ylim(bottom=0)
+        ax2 = ax.twinx()
+        ax2.plot(x, [r['close_gap'] for r in rr], color=S[3], lw=2, ls='--')
+        ax2.tick_params(colors=INK2, labelsize=8, length=0)
+        for sp in ax2.spines.values():
+            sp.set_visible(False)
 
     fig.tight_layout(rect=(0, 0, 1, 0.96))
     fig.savefig(out or f'runs/{run}/dashboard.png', dpi=110, facecolor=SURF)

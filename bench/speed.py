@@ -44,7 +44,7 @@ def stages(prog, p, reps=5):
     keys, dep, idx, ch = fr.enumerate_turn(prog, p, children=True)
     stop, bv = ts.stop_values(prog, p, nw, keys)
     new = dict(enumerate=best_of(lambda: fr.enumerate_turn(prog, p), reps), value=best_of(lambda: ts.stop_values(prog, p, nw, keys), reps),
-               fill=best_of(lambda: ts._fill(prog, p, keys, dep, ch, stop, bv, -1), reps))
+               fill=best_of(lambda: ts._fill(prog, p, keys, dep, ch, stop, bv, -1, ts._order(prog, p, keys)), reps))
     return dict(situations=len(keys), old=old, new=new)
 
 def cold(*args):

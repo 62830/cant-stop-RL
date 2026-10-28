@@ -1,4 +1,5 @@
 import os, copy, json, time, random, argparse
+os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')  # before numpy: workers inherit it (numba's GEMM, any net width)
 from collections import deque
 from multiprocessing import Pool
 import numpy as np
@@ -7,7 +8,9 @@ from game import State
 from heuristics import VH
 from solver_agent import SolverAgent
 from turn_solver import solve_turn, _stop_boards
+from branching import SETS, Turn, candidates, cached_sets, load_sets, set_keys, resid_jobs, resid_by_set
 
+BRANCH_FLAGS = dict(branch_end=0, branch_close=0, close_delta=0.02, rho_min=0.01)  # defaults of runs before branching
 BEST_VH = VH('claim_top3', (0.6431, 0.6591), 0.2690)
 ZERO = np.zeros(13, np.int8)
 
@@ -39,12 +42,36 @@ def _vfn(src):
         _cache[src] = NetV.load(src).fused()
     return _cache[src]
 
-def play(args):
-    # one greedy self-play game; at each turn start records (board, to_move, y = best(empty | s), V(s), won)
-    src, seed = args
+_held = {}
+
+def held_keys(path):
+    # (board bytes, to move) of the R7 sets at path (cached per worker); training never samples them
+    if path not in _held:
+        _held.clear()
+        _held[path] = set_keys(load_sets(path)) if path else set()
+    return _held[path]
+
+def play(args, hook=None):
+    # one greedy self-play game; at each turn start records (board, to_move, y = best(empty | s), V(s), won) and calls
+    # hook(solution). With br = (k_end, k_close, delta, rho_min, R7 sets path), each turn start samples candidate extra boards
+    # right after its solve (branching R1, own rng: the game is unchanged); after the game up to k per source that are not
+    # a turn start of this game, an R7 board or already taken (R2) are solved for the opponent with the same net.
+    # Returns recs, visited solve time, visited solves, extra [(board, to_move, y, source)], close-call gaps per turn
+    # start, extra solve time
+    src, seed = args[:2]
+    br = args[2] if len(args) > 2 else None
     v = _vfn(src)
     random.seed(seed)
-    agent, s, rec, t, solves = SolverAgent(v), State(), [], 0.0, 0
+    agent, s, rec, t, solves, cands, gaps = SolverAgent(v), State(), [], 0.0, 0, [], []
+    if br and (br[0] or br[1]):
+        k_end, k_close, delta, rho_min, path = br
+        rng, held = np.random.default_rng(seed), held_keys(path)
+        def hook(sol):
+            tn = Turn(sol, delta, rho_min)
+            gaps.append([c[4] for c in tn.close])
+            ex = held | {(r[0].tobytes(), r[1]) for r in rec}
+            cands.append((tn.p, [candidates(f, rng, ex, 1 - tn.p, k + 2) if k else []
+                                 for f, k in ((tn.sample_end, k_end), (tn.sample_close, k_close))]))
     while not s.is_terminal():
         if not s.tmp_track and not s.wait_for_go and not s.end_turn:
             prog, p, _ = fr.from_state(s)
@@ -53,9 +80,19 @@ def play(args):
             t += time.time() - t0
             solves += 1
             rec.append((prog, p, sol.value(ZERO), float(v(prog[None], p)[0])))
+            if hook:
+                hook(sol)
         s, _ = s.update(agent.act(s))
     w = s.get_winner()
-    return [r + (float(r[1] == w),) for r in rec], t, solves
+    extra, te, taken = [], 0.0, {(r[0].tobytes(), r[1]) for r in rec}
+    for p, srcs in cands:
+        for tag, bs, k in zip(('end', 'close'), srcs, (k_end, k_close)):
+            for b in [b for b in bs if (b.tobytes(), 1 - p) not in taken][:k]:
+                taken.add((b.tobytes(), 1 - p))
+                t0 = time.time()
+                extra.append((b, 1 - p, solve_turn(b, 1 - p, v).value(ZERO), tag))
+                te += time.time() - t0
+    return [r + (float(r[1] == w),) for r in rec], t, solves, extra, gaps, te
 
 def residual_job(args):
     src, progs, ps = args
@@ -119,6 +156,15 @@ def main():
     ap.add_argument('--calib_every', type=int, default=5)
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--no_warm', action='store_true', help='skip the V_h fit: snapshot 0 is the randomly initialized (seeded) net')
+    ap.add_argument('--branch_end', type=int, default=0, help='extra end boards per turn start (branching R1)')
+    ap.add_argument('--branch_close', type=int, default=0, help='extra close-call boards per turn start (branching R1)')
+    ap.add_argument('--close_delta', type=float, default=0.02)
+    ap.add_argument('--rho_min', type=float, default=0.01)
+    ap.add_argument('--n_set', type=int, default=900, help='turn starts in the visited / end / close residual sets (R7); 0: none')
+    ap.add_argument('--set_games', type=int, default=100)
+    ap.add_argument('--set_seed', type=int, default=10000, help='first V_h game seed of the R7 sets (disjoint from training)')
+    ap.add_argument('--resid_sub', type=int, default=300, help='R7 rows per measurement (fixed subset; 0: all)')
+    ap.add_argument('--resid_full_every', type=int, default=20, help='R7 on all rows every this many iterations')
     a = ap.parse_args()
     out = os.path.join('runs', a.run)
     ckdir = os.path.join(out, 'ckpt')
@@ -128,6 +174,11 @@ def main():
         raise SystemExit(f'{out} already has a run; pass --resume to continue it or choose another --run')
     if a.resume and not prior:
         raise SystemExit(f'--resume: no checkpoints in {ckdir}')
+    if a.resume:
+        cfg = [json.loads(l) for l in open(mf) if '"kind": "config"' in l][-1]
+        diff = {k: (cfg.get(k, d), getattr(a, k)) for k, d in BRANCH_FLAGS.items() if cfg.get(k, d) != getattr(a, k)}
+        if diff:
+            raise SystemExit(f'--resume: branching flags differ from the run (logged, given): {diff}')
     os.makedirs(ckdir, exist_ok=True)
     if os.path.exists(os.path.join(out, 'DONE')):
         os.remove(os.path.join(out, 'DONE'))
@@ -142,6 +193,12 @@ def main():
     log(mf, kind='config', **vars(a), t=time.time())
     t0 = time.time()
     H_progs, H_p, starts = heldout(pool, a, a.warm_games // 3 if a.resume or a.no_warm else a.warm_games)
+    t1 = time.time()
+    spath = os.path.join(out, 'r7_sets.npz') if a.n_set else None
+    sets = cached_sets(spath, pool, a.set_seed, a.set_games, a.n_set, a.close_delta, a.rho_min) if a.n_set else None
+    n_rows = len(sets['visited'][0]) if sets else 0
+    sub = np.random.default_rng(a.seed).choice(n_rows, min(a.resid_sub or n_rows, n_rows), replace=False)
+    print(log(mf, kind='sets', **{k: len(sets[k][0]) if sets else 0 for k in SETS}, seconds=round(time.time() - t1, 1)), flush=True)
 
     if a.resume:
         it = int(prior[-1][2:6])
@@ -184,26 +241,48 @@ def main():
         t0 = time.time()
         src = ckpt(ckdir, it)  # the snapshot (target net) workers play and bootstrap with
         do_resid = it % a.resid_every == 0
+        br = (a.branch_end, a.branch_close, a.close_delta, a.rho_min, spath)
+        pjobs = pool.map_async(play, [(src, (a.seed + 1) * 10 ** 7 + it * 1000 + i, br) for i in range(a.games)], chunksize=1)
+        # residual jobs queue behind self-play, so its wall time excludes them
         rjobs = pool.map_async(residual_job, [(src, H_progs[c], H_p[c]) for c in chunks] if do_resid else [])
-        res = list(pool.imap_unordered(play, [(src, (a.seed + 1) * 10 ** 7 + it * 1000 + i) for i in range(a.games)]))
-        resid = np.array([r for part in rjobs.get() for r in part]).reshape(-1, 2)
+        full = bool(sets) and it % a.resid_full_every == 0
+        sj, tag, R = resid_jobs(src, sets, None if full else sub, 2 * a.workers) if sets and (do_resid or full) else ([], None, None)
+        sjobs = pool.map_async(residual_job, sj)
+        res = pjobs.get()
         wall = time.time() - t0
+        resid = np.array([r for part in rjobs.get() for r in part]).reshape(-1, 2)
+        rsets = {k: float(np.abs(d).mean()) for k, (_, d) in resid_by_set(sjobs.get(), tag, R).items()} if sj else None
         recs = [r for g in res for r in g[0]]
-        buf.extend((r[0], r[1], r[2]) for r in recs)
+        extra, seen = [], set()  # extra boards deduplicated across this iteration's games
+        for e in (e for g in res for e in g[3]):
+            if (e[0].tobytes(), e[1]) not in seen:
+                seen.add((e[0].tobytes(), e[1]))
+                extra.append(e)
+        gaps = [g for r in res for g in r[4]]
+        buf.extend((r[0], r[1], r[2], 'visited') for r in recs)
+        buf.extend(extra)
         calib += recs
         bp, bm, by = (np.array([r[i] for r in buf]) for i in range(3))
-        steps = max(1, int(a.replay * len(recs) / a.batch))
+        steps = max(1, int(a.replay * (len(recs) + len(extra)) / a.batch))
         losses = fit(net, X(bp, bm), by, steps, a.batch, opt)
         it += 1
         NetV(net).save(ckpt(ckdir, it))
         vp = np.array([r[3] for r in recs])
         d = resid[:, 1] - resid[:, 0]
+        npairs = dict(visited=len(recs), **{k: sum(e[3] == k for e in extra) for k in ('end', 'close')})
         lines = [json.dumps(dict(kind='update', iter=it - 1, loss=losses)),
                  json.dumps(dict(kind='iter', iter=it, t=round(time.time() - t_start, 1),
                                  residual=float(np.abs(d).mean()) if do_resid else None, resid_signed=float(d.mean()) if do_resid else None,
                                  v_mean=float(vp.mean()), v_std=float(vp.std()), y_mean=float(np.mean([r[2] for r in recs])),
-                                 games_per_s=a.games / wall, solve_s=sum(g[1] for g in res) / sum(g[2] for g in res),
-                                 buffer=len(buf), pairs=len(recs), steps=steps, iter_s=round(time.time() - t0, 1)))]
+                                 resid_sets=rsets, resid_full=full if rsets else None, resid_n=(n_rows if full else len(sub)) if rsets else None,
+                                 games_per_s=a.games / wall, targets_per_s=sum(npairs.values()) / wall,
+                                 solve_s=sum(g[1] for g in res) / sum(g[2] for g in res),
+                                 extra_solve_s=sum(g[5] for g in res) / max(1, sum(len(g[3]) for g in res)),
+                                 solves_per_turn=(len(recs) + sum(len(g[3]) for g in res)) / len(recs),
+                                 extra_dups=sum(len(g[3]) for g in res) - len(extra),
+                                 close_per_turn=float(np.mean([len(g) for g in gaps])) if gaps else None,
+                                 close_gap=float(np.mean([x for g in gaps for x in g])) if any(gaps) else None,
+                                 buffer=len(buf), pairs=len(recs), pairs_src=npairs, steps=steps, iter_s=round(time.time() - t0, 1)))]
         if it % a.calib_every == 0:
             cp, cm, cv, co = (np.array([r[i] for r in calib]) for i in (0, 1, 3, 4))
             (nb, ne), (wbins, we) = bins(cv, co), bins(warm(pov(cp, cm), 0), co)
