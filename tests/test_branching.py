@@ -3,7 +3,7 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import fastrules as fr
 import game
-from branching import Turn, DELTA, legal, merge_close, _forward
+from branching import Turn, DELTA, SETS, legal, merge_close, _forward, load_sets, resid_jobs, resid_by_set
 from eval import _game, _pairs
 from heuristics import VH
 from solver_agent import SolverAgent
@@ -15,7 +15,7 @@ def _turns():
     return [Turn(solve_turn(prog, p, BEST_VH)) for prog, p, *_ in recs[::max(1, len(recs) // 4)]]
 
 TURNS = _turns()
-BR = (1, 2, DELTA, 0.01)
+BR = (1, 2, DELTA, 0.01, None)
 
 def test_mass_sums():
     for t in TURNS:  # Turn.forward asserts it too, also for forced-go / mid-turn starts
@@ -68,11 +68,11 @@ def _same(a, b):
 def test_k0_identical_and_branching_tags():
     seed = 11
     ref = _reference_play(BEST_VH, seed)
-    k0 = play((BEST_VH, seed, (0, 0, DELTA, 0.01)))
+    k0 = play((BEST_VH, seed, (0, 0, DELTA, 0.01, None)))
     assert _same(ref, k0[0]) and _same(ref, play((BEST_VH, seed))[0]) and k0[3] == [] and k0[2] == len(ref)
-    recs, _, solves, extra, gaps = play((BEST_VH, seed, BR))
+    recs, _, solves, extra, gaps, _ = play((BEST_VH, seed, BR))
     assert _same(ref, recs)  # branching never perturbs the game
-    assert len(gaps) == len(recs) and solves == len(recs) + len(extra)
+    assert len(gaps) == len(recs) and solves == len(recs)
     seen = {(r[0].tobytes(), r[1]) for r in recs}
     for b, m, y, tag in extra:
         assert tag in ('end', 'close') and legal(b) and (b.tobytes(), m) not in seen
@@ -84,6 +84,22 @@ def test_k0_identical_and_branching_tags():
     for b, m, *_ in extra:
         assert any(p == 1 - m and (b[1 - p] <= prog[1 - p]).all() and (b[p] >= prog[p]).all()
                    for prog, p, *_ in recs)
+
+def test_heldout_excluded_and_sets_io(tmp_path):
+    # extras never include an R7 board; sets round-trip through the npz and the shared residual helper
+    extra = play((BEST_VH, 11, BR))[3]
+    b = np.array([e[0] for e in extra])
+    m = np.array([e[1] for e in extra])
+    sets = {k: (b, m, np.arange(len(m))) for k in SETS}
+    path = str(tmp_path / 'r7.npz')
+    np.savez(path, key=np.zeros(5), **{k + s: a for k, v in sets.items() for s, a in zip(('_b', '_m', '_r'), v)})
+    assert all((x == y).all() for k in SETS for x, y in zip(load_sets(path)[k], sets[k]))
+    held = {(x.tobytes(), int(y)) for x, y in zip(b, m)}
+    again = play((BEST_VH, 11, BR[:4] + (path,)))[3]
+    assert again and not any((e[0].tobytes(), e[1]) in held for e in again)
+    jobs, tag, R = resid_jobs('x', sets, rows=[0, 2], n_chunks=2)
+    out = resid_by_set([[(0.5, 0.75)] * len(j[2]) for j in jobs], tag, R)
+    assert set(out) == set(SETS) and all(list(r) == [0, 2] and np.allclose(d, 0.25) for r, d in out.values())
 
 def test_paired_eval():
     v = VH('top3', (4.0,))

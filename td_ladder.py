@@ -22,7 +22,7 @@ def match(mf, it, name, a, b, n, workers, seed, paired=False):
     # paired: n pairs of games (branching spec R8), CI over pairs
     t = time.time()
     p, (lo, hi) = (evaluate_paired if paired else evaluate)(a, b, n, workers, seed)
-    return json.loads(log(mf, kind='ladder', iter=it, opp=name, p=p, lo=lo, hi=hi, n=n, paired=paired, wall_s=round(time.time() - t, 1)))
+    return json.loads(log(mf, kind='ladder', iter=it, opp=name, p=p, lo=lo, hi=hi, n=n, paired=paired, ci='normal over pairs' if paired else 'wilson', wall_s=round(time.time() - t, 1)))
 
 def trainer_alive(run):
     # td_train writes runs/<run>/train.pid and removes it on a clean exit
@@ -77,7 +77,7 @@ def gate(a, mf):
         res = {'snapshot': it}
         for name, b in (('vh', agent('vh')), ('v2tuned', V2Tuned), ('v2', V2)):
             r = match(mf, it, 'gate_' + name, me, b, a.n, a.workers, 777, a.paired)
-            res[name] = {k: r[k] for k in ('p', 'lo', 'hi', 'n', 'paired', 'wall_s')}
+            res[name] = {k: r[k] for k in ('p', 'lo', 'hi', 'n', 'paired', 'ci', 'wall_s')}
             print(role, it, name, res[name], flush=True)
         out[role] = res
     path = os.path.join('runs', a.run, 'results.json')

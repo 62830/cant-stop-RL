@@ -1,3 +1,4 @@
+import os
 import numpy as np
 from numba import njit
 import fastrules as fr
@@ -152,44 +153,73 @@ def candidates(sample, rng, exclude, to_move, k):
         exclude.add((b.tobytes(), to_move))
     return out
 
-def branch(t, k_end, k_close, rng, exclude):
-    # R1/R2 for one Turn: up to k_end end boards and k_close close-call boards (opponent to move) -> [(board, source)]
-    return [(b, src) for src, k, f in (('end', k_end, t.sample_end), ('close', k_close, t.sample_close))
-            for b in candidates(f, rng, exclude, 1 - t.p, k)]
-
 # ---- R7 held-out sets
 def game_job(g, k=4, delta=DELTA, rho_min=RHO_MIN):
-    # one V_h game with seed g: per turn start, close-call stats and up to k end / close candidate boards excluding this
-    # game's turn starts (incl. each turn's actual next start); build_sets takes the first one not excluded globally (R2)
+    # one V_h game with seed g: per turn start (reusing play's solve), close-call stats and up to k end / close candidate
+    # boards; build_sets drops those that are any game's turn start or already taken (R2)
     from td_train import BEST_VH, play
-    from turn_solver import solve_turn
-    recs = play((BEST_VH, g))[0]
-    rng = np.random.default_rng(g)
-    starts = {(r[0].tobytes(), r[1]) for r in recs}
-    out = []
-    for prog, p, *_ in recs:
-        t = Turn(solve_turn(prog, p, BEST_VH), delta, rho_min)
-        out.append(dict(prog=prog, p=int(p), end=candidates(t.sample_end, rng, set(starts), 1 - p, k),
-                        close=candidates(t.sample_close, rng, set(starts), 1 - p, k), n_close=len(t.close),
+    rng, out = np.random.default_rng(g), []
+    def hook(sol):
+        t = Turn(sol, delta, rho_min)
+        out.append(dict(prog=t.prog, p=t.p, end=candidates(t.sample_end, rng, set(), 1 - t.p, k),
+                        close=candidates(t.sample_close, rng, set(), 1 - t.p, k), n_close=len(t.close),
                         gaps=[r[4] for r in t.close], exp_close=float(sum(r[5] for r in t.close)),
                         win_mass=float(t.end[t.win].sum()), bust=t.bust))
+    play((BEST_VH, g), hook)
     return out
 
 def build_sets(pool, seed0, n_games, n, delta=DELTA, rho_min=RHO_MIN):
     # n turn starts of V_h games seed0.. (visited) and, paired with each, its end and close board (absent if none survives
-    # R2: excluded are all turn starts of these games and every board already taken, globally). Returns (turns, rows)
+    # R2: excluded are all turn starts of these games and every board already taken, globally).
+    # Returns (turns, sets {name: (boards, to_move, turn-start row)})
     from functools import partial
     flat = [r for g in pool.map(partial(game_job, delta=delta, rho_min=rho_min), range(seed0, seed0 + n_games), chunksize=1)
             for r in g]
     sel = np.random.default_rng(seed0).choice(len(flat), min(n, len(flat)), replace=False)
     seen = {(r['prog'].tobytes(), r['p']) for r in flat}
-    rows = []
-    for i in sel:
-        r, row = flat[i], dict(visited=(flat[i]['prog'], flat[i]['p']))
-        for src in ('end', 'close'):
-            b = next((b for b in r[src] if (b.tobytes(), 1 - r['p']) not in seen), None)
+    sets = {k: ([], [], []) for k in SETS}
+    for j, i in enumerate(sel):
+        r = flat[i]
+        for k, b in [('visited', r['prog'])] + [(k, next((b for b in r[k] if (b.tobytes(), 1 - r['p']) not in seen), None))
+                                                 for k in ('end', 'close')]:
             if b is not None:
-                seen.add((b.tobytes(), 1 - r['p']))
-                row[src] = (b, 1 - r['p'])
-        rows.append(row)
-    return flat, rows
+                m = r['p'] if k == 'visited' else 1 - r['p']
+                seen.add((b.tobytes(), m))
+                for lst, x in zip(sets[k], (b, m, j)):
+                    lst.append(x)
+    return flat, {k: (np.array(b, np.int8).reshape(-1, 2, 13), np.array(m, np.int64), np.array(r, np.int64))
+                  for k, (b, m, r) in sets.items()}
+
+def cached_sets(path, pool, seed0, n_games, n, delta=DELTA, rho_min=RHO_MIN):
+    # build_sets' sets, saved to / reused from path (an .npz) when built with the same arguments
+    key = np.array([seed0, n_games, n, delta, rho_min], np.float64)
+    if os.path.exists(path) and np.array_equal(np.load(path)['key'], key):
+        return load_sets(path)
+    sets = build_sets(pool, seed0, n_games, n, delta, rho_min)[1]
+    np.savez(path + '.tmp.npz', key=key, **{k + s: a for k, v in sets.items() for s, a in zip(('_b', '_m', '_r'), v)})
+    os.replace(path + '.tmp.npz', path)
+    return sets
+
+def load_sets(path):
+    z = np.load(path)
+    return {k: (z[k + '_b'], z[k + '_m'], z[k + '_r']) for k in SETS}
+
+def set_keys(sets):
+    return {(b.tobytes(), int(m)) for bs, ms, _ in sets.values() for b, m in zip(bs, ms)}
+
+def resid_jobs(src, sets, rows=None, n_chunks=16):
+    # td_train.residual_job args over the boards of sets on turn-start rows (None: all), and each board's (set, row)
+    tag, B, M, R = [], [], [], []
+    for k in SETS:
+        b, m, r = sets[k]
+        ok = np.ones(len(r), bool) if rows is None else np.isin(r, rows)
+        tag += [k] * int(ok.sum())
+        B.append(b[ok]), M.append(m[ok]), R.append(r[ok])
+    B, M, R = np.concatenate(B), np.concatenate(M), np.concatenate(R)
+    return [(src, B[c], M[c]) for c in np.array_split(np.arange(len(M)), n_chunks) if len(c)], np.array(tag), R
+
+def resid_by_set(parts, tag, R):
+    # residual_job results (in job order) -> {set: (turn-start rows, V - y)}
+    yv = np.array([x for p in parts for x in p]).reshape(-1, 2)
+    d = yv[:, 1] - yv[:, 0]
+    return {k: (R[tag == k], d[tag == k]) for k in SETS if (tag == k).any()}

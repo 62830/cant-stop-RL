@@ -123,11 +123,10 @@ def main(run='phase4', out=None):
     mark_resumes(ax, resumes)
     rr = [r for r in it if r.get('resid_sets')]
     if rr:
-        nmax = max(r['resid_n'] for r in rr)
         for k, c in sets.items():
             label = k
             for full in (False, True):
-                pts = [(r['iter'], r['resid_sets'][k]) for r in rr if k in r['resid_sets'] and (r['resid_n'] == nmax) == full]
+                pts = [(r['iter'], r['resid_sets'][k]) for r in rr if k in r['resid_sets'] and bool(r.get('resid_full')) == full]
                 if pts:
                     ax.plot(*zip(*pts), color=c, lw=0 if full else 2, marker='o', ms=6 if full else 0, label=label)
                     label = None

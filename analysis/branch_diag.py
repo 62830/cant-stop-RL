@@ -4,7 +4,7 @@ from multiprocessing import Pool
 import numpy as np
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
-from branching import DELTA, RHO_MIN, SETS, legal, build_sets
+from branching import DELTA, RHO_MIN, SETS, legal, build_sets, resid_jobs, resid_by_set
 from td_train import residual_job
 
 # Step 0 of the branching spec: residual of existing nets on visited / end / close held-out sets (built by branching.py)
@@ -14,17 +14,13 @@ WIDE60 = os.path.join(os.path.dirname(ROOT), 'cant_stop_wide/runs/wide60/it0100.
 def ci(x):
     return [float(np.nanpercentile(x, 2.5)), float(np.nanpercentile(x, 97.5))]
 
-def residuals(pool, path, rows, workers):
+def residuals(pool, path, sets, n, workers):
     # abs residual |V - y| per (turn start, set), NaN where the row has no board; and signed means
-    D = np.full((len(rows), 3), np.nan)
-    signed = []
-    for j, sname in enumerate(SETS):
-        idx = [i for i, r in enumerate(rows) if sname in r]
-        progs, ms = np.array([rows[i][sname][0] for i in idx]), np.array([rows[i][sname][1] for i in idx])
-        chunks = np.array_split(np.arange(len(ms)), 4 * workers)
-        yv = np.array([r for part in pool.map(residual_job, [(path, progs[c], ms[c]) for c in chunks]) for r in part])
-        D[idx, j] = np.abs(yv[:, 1] - yv[:, 0])
-        signed.append(float((yv[:, 1] - yv[:, 0]).mean()))
+    jobs, tag, R = resid_jobs(path, sets, None, 4 * workers)
+    D, signed = np.full((n, 3), np.nan), []
+    for k, (r, d) in resid_by_set(pool.map(residual_job, jobs), tag, R).items():
+        D[r, SETS.index(k)] = np.abs(d)
+        signed.append(float(d.mean()))
     return D, signed
 
 def summarize(D, signed, B=5000, seed=0):
@@ -51,10 +47,10 @@ def main():
     nets = dict(NETS, wide60=a.wide60)
     t0 = time.time()
     with Pool(a.workers) as pool:
-        flat, rows = build_sets(pool, a.seed0, a.games, a.n)
-        sizes = {s: sum(s in r for r in rows) for s in SETS}
+        flat, sets = build_sets(pool, a.seed0, a.games, a.n)
+        sizes = {s: len(sets[s][0]) for s in SETS}
         for s, k in sizes.items():
-            assert all(legal(r[s][0]) for r in rows if s in r)
+            assert all(legal(b) for b in sets[s][0])
             if k < 0.95 * a.n:
                 print(f'WARNING: {s} set has {k} boards (< 95% of {a.n})', flush=True)
         print(f'sets built in {time.time() - t0:.0f}s: {sizes}', flush=True)
@@ -70,7 +66,7 @@ def main():
                 print(f'WARNING: skipping {name}, {path} not found', flush=True)
                 continue
             t1 = time.time()
-            R = summarize(*residuals(pool, path, rows, a.workers))
+            R = summarize(*residuals(pool, path, sets, sizes['visited'], a.workers))
             res['nets'][name] = dict(path=os.path.relpath(path, ROOT), seconds=round(time.time() - t1, 1), **R)
             print(name, json.dumps(R), flush=True)
     res['proceed'] = {k: max(v['end']['ratio'], v['close']['ratio']) >= 1.5 for k, v in res['nets'].items()}
