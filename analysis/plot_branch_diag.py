@@ -24,7 +24,7 @@ def main(path=os.path.join(D, 'results.json')):
         ax.errorbar(x, m, [m - lo, hi - m], fmt='none', ecolor=INK, elinewidth=1, capsize=2, zorder=3)
         for xi, s, h in zip(x, sets, hi):
             if s != 'visited':
-                ax.text(xi, h, f"{r[s]['ratio']:.1f}×", ha='center', va='bottom', fontsize=7, color=MUTED)
+                ax.text(xi, h, f"{r[s]['ratio']:.2f}×", ha='center', va='bottom', fontsize=7, color=MUTED)
     ax.set_xticks(range(len(sets)), [f"{s}\n(n={res['sizes'][s]})" for s in sets], color=INK)
     ax.set_ylabel('residual  mean |V(b) − best(∅|b)|', color=MUTED)
     ax.set_title('Value-net residual by held-out set (labels: ratio to visited)', color=INK, fontsize=10, loc='left')

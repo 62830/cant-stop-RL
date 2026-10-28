@@ -12,8 +12,8 @@ from td_train import BEST_VH, play, residual_job
 # Step 0 of the branching spec: residual of existing nets on visited / end / close held-out sets.
 # The forward pass, close-call detection and board extraction are the pieces Step 1 moves into the library.
 DELTA, RHO_MIN = 0.02, 0.01
-NETS = {'td30': 'runs/td30/it0082.pt', 'scratch30': 'runs/scratch30/it0297.pt',
-        'wide60': os.path.join(os.path.dirname(ROOT), 'cant_stop_wide/runs/wide60/it0100.pt')}
+NETS = {'td30': os.path.join(ROOT, 'runs/td30/it0082.pt'), 'scratch30': os.path.join(ROOT, 'runs/scratch30/it0297.pt')}
+WIDE60 = os.path.join(os.path.dirname(ROOT), 'cant_stop_wide/runs/wide60/it0100.pt')  # PR #10, not merged
 
 @njit(cache=True)
 def _order(prog, p, keys):
@@ -101,10 +101,13 @@ class Turn:
         self.rho, self.end, self.bust, recs = self.forward()
         self.close = merge_close(recs)
 
-    def forward(self, start=0, force_go=False):
+    def forward(self, start=0, force_go=False, light=False):
+        # light: no close-call records and no mass check (sampling from a counterfactual branch)
         s = self.sol
-        rho, end, bust, recs = _forward(self.order, *self.child, s.best, s.stop, s.go, start, force_go, DELTA, RHO_MIN)
-        assert abs(end.sum() + bust - 1) < 1e-9, end.sum() + bust
+        rho, end, bust, recs = _forward(self.order, *self.child, s.best, s.stop, s.go, start, force_go, DELTA,
+                                        np.inf if light else RHO_MIN)
+        if not light:
+            assert abs(end.sum() + bust - 1) < 1e-9, end.sum() + bust
         return rho, end, bust, recs
 
     def board(self, row):
@@ -113,7 +116,7 @@ class Turn:
 
     def sample_end(self, rng, exclude, start=0, force_go=False):
         # one non-terminal end board of mu (from start, optionally forcing go there), skipping excluded (board bytes, to move)
-        end, bust = (self.end, self.bust) if start == 0 and not force_go else self.forward(start, force_go)[1:3]
+        end, bust = (self.end, self.bust) if start == 0 and not force_go else self.forward(start, force_go, True)[1:3]
         rows = np.r_[np.flatnonzero((end > 0) & ~self.win), -1]
         mass = np.r_[end[rows[:-1]], bust]
         while mass.sum() > 0:
@@ -158,77 +161,113 @@ def legal(b):
     h = b[:, 2:]
     return bool((h >= 0).all() and (h <= L).all() and not ((h == L) & (h[::-1] > 0)).any() and (h == L).sum(1).max() < 3)
 
-def game_job(g):
-    # one V_h game (td_train.heldout's seeding): per turn start, close-call stats and one end / close board (R2 exclusions)
+def candidates(sample, rng, exclude, to_move, k):
+    # up to k distinct boards from sample(rng, exclude) (to_move: who moves on them)
+    out, ex = [], set(exclude)
+    for _ in range(k):
+        b = sample(rng, ex)
+        if b is None:
+            break
+        out.append(b)
+        ex.add((b.tobytes(), to_move))
+    return out
+
+def game_job(g, k=4):
+    # one V_h game with seed g (td_train.heldout: seed 0 -> games 0..95): per turn start, close-call stats and up to k
+    # end / close candidate boards excluding this game's turn starts (incl. each turn's actual next start); main() takes
+    # the first candidate not excluded globally (R2)
     recs = play((BEST_VH, g))[0]
     rng = np.random.default_rng(g)
-    seen = {(r[0].tobytes(), r[1]) for r in recs}  # (board, to move) of the visited turn starts, incl. each turn's actual next start
+    starts = {(r[0].tobytes(), r[1]) for r in recs}
     out = []
     for prog, p, *_ in recs:
         t = Turn(prog, p, BEST_VH)
-        e = t.sample_end(rng, seen)
-        seen.add((e.tobytes(), 1 - p)) if e is not None else None
-        c = t.sample_close(rng, seen)
-        seen.add((c.tobytes(), 1 - p)) if c is not None else None
-        out.append(dict(prog=prog, p=int(p), end=e, close=c, n_close=len(t.close), gaps=[r[4] for r in t.close],
+        out.append(dict(prog=prog, p=int(p), end=candidates(t.sample_end, rng, starts, 1 - p, k),
+                        close=candidates(t.sample_close, rng, starts, 1 - p, k), n_close=len(t.close), gaps=[r[4] for r in t.close],
                         exp_close=float(sum(r[5] for r in t.close)), win_mass=float(t.end[t.win].sum()), bust=t.bust))
     return out
 
-def boot(d, B, rng):
-    return np.abs(d)[rng.integers(len(d), size=(B, len(d)))].mean(1)
-
 def ci(x):
-    return [float(np.percentile(x, 2.5)), float(np.percentile(x, 97.5))]
+    return [float(np.nanpercentile(x, 2.5)), float(np.nanpercentile(x, 97.5))]
+
+def build_sets(pool, seed0, n_games, n):
+    # n turn starts of V_h games seed0.. (visited) and, paired with each, its end and close board (None if none survives
+    # R2: excluded are all turn starts of these games and every board already taken, globally)
+    flat = [r for g in pool.map(game_job, range(seed0, seed0 + n_games), chunksize=1) for r in g]
+    sel = np.random.default_rng(seed0).choice(len(flat), min(n, len(flat)), replace=False)
+    seen = {(r['prog'].tobytes(), r['p']) for r in flat}
+    rows = []
+    for i in sel:
+        r, row = flat[i], dict(visited=(flat[i]['prog'], flat[i]['p']))
+        for src in ('end', 'close'):
+            b = next((b for b in r[src] if (b.tobytes(), 1 - r['p']) not in seen), None)
+            if b is not None:
+                seen.add((b.tobytes(), 1 - r['p']))
+                row[src] = (b, 1 - r['p'])
+        rows.append(row)
+    return flat, rows
+
+def residuals(pool, path, rows, workers):
+    # abs residual |V - y| per (turn start, set), NaN where the row has no board; and signed means
+    D = np.full((len(rows), 3), np.nan)
+    signed = []
+    for j, sname in enumerate(SETS):
+        idx = [i for i, r in enumerate(rows) if sname in r]
+        progs, ms = np.array([rows[i][sname][0] for i in idx]), np.array([rows[i][sname][1] for i in idx])
+        chunks = np.array_split(np.arange(len(ms)), 4 * workers)
+        yv = np.array([r for part in pool.map(residual_job, [(path, progs[c], ms[c]) for c in chunks]) for r in part])
+        D[idx, j] = np.abs(yv[:, 1] - yv[:, 0])
+        signed.append(float((yv[:, 1] - yv[:, 0]).mean()))
+    return D, signed
+
+SETS = ('visited', 'end', 'close')
+
+def summarize(D, signed, B=5000, seed=0):
+    # paired bootstrap over turn starts: visited/end/close of a resampled turn start are drawn together
+    bs = np.stack([np.nanmean(D[np.random.default_rng(seed + b).integers(len(D), size=len(D))], 0) for b in range(B)])
+    m = np.nanmean(D, 0)
+    R = {s: dict(n=int((~np.isnan(D[:, j])).sum()), mean_abs=float(m[j]), ci=ci(bs[:, j]), signed=signed[j])
+         for j, s in enumerate(SETS)}
+    for j in (1, 2):
+        R[SETS[j]].update(ratio=float(m[j] / m[0]), ratio_ci=ci(bs[:, j] / bs[:, 0]))
+    return R
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--workers', type=int, default=8)
-    ap.add_argument('--n', type=int, default=200, help='set sizes (visited: today\'s 200 at the defaults)')
-    ap.add_argument('--games', type=int, default=32, help='V_h games the sets come from (td_train: 32)')
+    ap.add_argument('--n', type=int, default=900, help='turn starts (= visited size; end/close are paired with them)')
+    ap.add_argument('--games', type=int, default=100, help='V_h games the turn starts come from')
+    ap.add_argument('--seed0', type=int, default=10000, help='first game seed; 10000+ is disjoint from every training '
+                    'game. --seed0 0 --games 32 --n 200 is exactly td_train.heldout()')
+    ap.add_argument('--wide60', default=WIDE60)
     ap.add_argument('--out', default=os.path.join(ROOT, 'runs', 'diag'))
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
+    nets = dict(NETS, wide60=a.wide60)
     t0 = time.time()
-    pool = Pool(a.workers)
-    # td_train.heldout: seed 0, warm_games 96 -> visited = 200 of the turn starts of games 0..31, rng(0)
-    games = pool.map(game_job, range(a.games), chunksize=1)
-    flat = [r for g in games for r in g]
-    sel = np.random.default_rng(0).choice(len(flat), min(a.n, len(flat)), replace=False)
-    sets = {'visited': [(flat[i]['prog'], flat[i]['p']) for i in sel],
-            'end': [(flat[i]['end'], 1 - flat[i]['p']) for i in sel if flat[i]['end'] is not None]}
-    close = [(r['close'], 1 - r['p']) for r in flat if r['close'] is not None]
-    g = a.games
-    while len(close) < a.n and g < max(96, a.games):  # more V_h games (td_train's seeds 32..95) until enough close boards
-        more = pool.map(game_job, range(g, g + 16), chunksize=1)
-        close += [(r['close'], 1 - r['p']) for gm in more for r in gm if r['close'] is not None]
-        g += 16
-    sets['close'] = [close[i] for i in np.random.default_rng(1).choice(len(close), min(a.n, len(close)), replace=False)]
-    assert all(legal(b) for s in sets.values() for b, _ in s)
-    print(f'sets built in {time.time() - t0:.0f}s: ' + ', '.join(f'{k} {len(v)}' for k, v in sets.items()), flush=True)
-
-    gaps = [x for r in flat for x in r['gaps']]
-    res = dict(delta=DELTA, rho_min=RHO_MIN, n_games_close=g, sizes={k: len(v) for k, v in sets.items()},
-               close_calls=dict(turns=len(flat), per_turn=float(np.mean([r['n_close'] for r in flat])),
-                                frac_turns_ge1=float(np.mean([r['n_close'] > 0 for r in flat])),
-                                expected_per_turn=float(np.mean([r['exp_close'] for r in flat])),
-                                mean_gap=float(np.mean(gaps)), win_mass=float(np.mean([r['win_mass'] for r in flat])),
-                                bust_mass=float(np.mean([r['bust'] for r in flat]))), nets={})
-    rng = np.random.default_rng(0)
-    for name, path in NETS.items():
-        t1 = time.time()
-        R, bs = {}, {}
-        for sname, s in sets.items():
-            progs, ms = np.array([b for b, _ in s]), np.array([m for _, m in s])
-            chunks = np.array_split(np.arange(len(ms)), 4 * a.workers)
-            yv = np.array([r for part in pool.map(residual_job, [(path, progs[c], ms[c]) for c in chunks]) for r in part])
-            d = yv[:, 1] - yv[:, 0]
-            bs[sname] = boot(d, 10000, rng)
-            R[sname] = dict(mean_abs=float(np.abs(d).mean()), ci=ci(bs[sname]), signed=float(d.mean()))
-        for sname in ('end', 'close'):
-            R[sname]['ratio'] = R[sname]['mean_abs'] / R['visited']['mean_abs']
-            R[sname]['ratio_ci'] = ci(bs[sname] / bs['visited'])
-        res['nets'][name] = dict(path=path, seconds=round(time.time() - t1, 1), **R)
-        print(name, json.dumps(R), flush=True)
+    with Pool(a.workers) as pool:
+        flat, rows = build_sets(pool, a.seed0, a.games, a.n)
+        sizes = {s: sum(s in r for r in rows) for s in SETS}
+        for s, k in sizes.items():
+            assert all(legal(r[s][0]) for r in rows if s in r)
+            if k < 0.95 * a.n:
+                print(f'WARNING: {s} set has {k} boards (< 95% of {a.n})', flush=True)
+        print(f'sets built in {time.time() - t0:.0f}s: {sizes}', flush=True)
+        gaps = [x for r in flat for x in r['gaps']]
+        res = dict(seed0=a.seed0, games=a.games, delta=DELTA, rho_min=RHO_MIN, sizes=sizes,
+                   close_calls=dict(turns=len(flat), per_turn=float(np.mean([r['n_close'] for r in flat])),
+                                    frac_turns_ge1=float(np.mean([r['n_close'] > 0 for r in flat])),
+                                    expected_per_turn=float(np.mean([r['exp_close'] for r in flat])),
+                                    mean_gap=float(np.mean(gaps)), win_mass=float(np.mean([r['win_mass'] for r in flat])),
+                                    bust_mass=float(np.mean([r['bust'] for r in flat]))), nets={})
+        for name, path in nets.items():
+            if not os.path.exists(path):
+                print(f'WARNING: skipping {name}, {path} not found', flush=True)
+                continue
+            t1 = time.time()
+            R = summarize(*residuals(pool, path, rows, a.workers))
+            res['nets'][name] = dict(path=os.path.relpath(path, ROOT), seconds=round(time.time() - t1, 1), **R)
+            print(name, json.dumps(R), flush=True)
     res['proceed'] = {k: max(v['end']['ratio'], v['close']['ratio']) >= 1.5 for k, v in res['nets'].items()}
     res['seconds'] = round(time.time() - t0, 1)
     json.dump(res, open(os.path.join(a.out, 'results.json'), 'w'), indent=1)

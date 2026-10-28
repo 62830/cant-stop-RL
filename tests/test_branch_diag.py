@@ -16,7 +16,9 @@ TURNS = _turns()
 def test_mass_sums():
     for t in TURNS:  # Turn.forward asserts it too, also for forced-go / mid-turn starts
         assert abs(t.end.sum() + t.bust - 1) < 1e-9
-        i = int(np.argmax(np.where(np.arange(len(t.rho)) > 0, t.rho, 0)))
+        ok = np.isfinite(t.sol.go) & ~t.win & (np.arange(len(t.rho)) > 0)  # an expanded, non-winning mid-turn row
+        i = int(np.argmax(np.where(ok, t.rho, -1)))
+        assert ok[i]
         rho, end, bust, _ = t.forward(i, True)
         assert abs(end.sum() + bust - 1) < 1e-9
 
@@ -34,11 +36,13 @@ def test_close_call_detected():
     # hand-built: at a reached situation where pi goes, set stop just under go -> a go/stop close call rejecting its stop board
     t = TURNS[0]
     s = t.sol
-    i = next(i for i in np.argsort(-t.rho) if i > 0 and s.go[i] > s.stop[i] + DELTA and t.rho[i] >= 0.05)
+    i = next((i for i in np.argsort(-t.rho) if i > 0 and s.go[i] > s.stop[i] + DELTA and t.rho[i] >= 0.05), None)
+    assert i is not None, 'no reached situation where pi clearly goes; pick another test game'
     stop = s.stop.copy()
     stop[i] = s.go[i] - DELTA / 2
     recs = merge_close(_forward(t.order, *t.child, s.best, stop, s.go, 0, False, DELTA, 0.01)[3])
-    rec = next(r for r in recs if r[0] == 0 and r[1] == i)
+    rec = next((r for r in recs if r[0] == 0 and r[1] == i), None)
+    assert rec is not None, f'hand-built go/stop close call at row {i} not detected'
     assert rec[2] == 1 and abs(rec[4] - DELTA / 2) < 1e-12
     b = t.rejected_board(np.random.default_rng(0), rec, set())
     assert (b == fr.apply_stop(t.prog, t.p, fr.decode(s.keys[i]))).all()
