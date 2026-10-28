@@ -1,0 +1,70 @@
+{
+ "gate": {
+  "snapshot": 100,
+  "selected_by": "last snapshot (no selection)",
+  "vh": {
+   "p": 0.5135,
+   "lo": 0.4915896341052006,
+   "hi": 0.5353586037195854,
+   "n": 2000,
+   "wall_s": 371.2
+  },
+  "v2tuned": {
+   "p": 0.735,
+   "lo": 0.7067841462790525,
+   "hi": 0.7614172113853439,
+   "n": 1000,
+   "wall_s": 142.6
+  },
+  "v2": {
+   "p": 0.767,
+   "lo": 0.7398066130145089,
+   "hi": 0.7921498231403588,
+   "n": 1000,
+   "wall_s": 153.1
+  }
+ },
+ "config": {
+  "kind": "config",
+  "run": "wide60",
+  "resume": false,
+  "minutes": 60.0,
+  "iters": 1000000000,
+  "workers": 8,
+  "games": 96,
+  "hidden": "256,128",
+  "buffer": 50000,
+  "replay": 8,
+  "batch": 256,
+  "lr": 0.0001,
+  "warm_games": 96,
+  "n_resid": 200,
+  "resid_every": 2,
+  "calib_every": 5,
+  "seed": 0,
+  "t": 1793194546.2385516
+ },
+ "env": "OPENBLAS_NUM_THREADS=1 (required for hidden 256,128: the layer-2 GEMM otherwise goes multithreaded per worker)",
+ "width_bench_ms": {
+  "128,64": {
+   "empty": 87.0,
+   "mid_mean": 18.2
+  },
+  "256,128": {
+   "empty": 136.8,
+   "mid_mean": 28.2
+  },
+  "256,256": {
+   "empty": 205.3,
+   "mid_mean": 42.1
+  },
+  "384,192": {
+   "empty": 228.7,
+   "mid_mean": 44.1
+  },
+  "512,256": {
+   "empty": 362.6,
+   "mid_mean": 81.1
+  }
+ }
+}
