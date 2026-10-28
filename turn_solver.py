@@ -27,37 +27,76 @@ def _stop_boards(prog, p, keys):
     n = len(keys)
     boards = np.empty((n, 2, 13), np.int8)
     win = np.zeros(n, np.bool_)
+    tmp = np.zeros(13, np.int8)
     for i in range(n):
-        boards[i] = fr.apply_stop(prog, p, fr.decode(keys[i]))
-        win[i] = fr.score(boards[i], p) >= 3
+        fr.decode_into(keys[i], tmp)
+        boards[i] = fr.apply_stop(prog, p, tmp)
+        win[i] = fr.stop_wins(prog, p, tmp)
     return boards, win
 
 @njit(cache=True)
-def _fill(prog, p, keys, depth, index, stop, bust_val, limit):
+def _wins(prog, p, keys):
+    win = np.zeros(len(keys), np.bool_)
+    tmp = np.zeros(13, np.int8)
+    for i in range(len(keys)):
+        win[i] = fr.stop_wins(prog, p, fr.decode_into(keys[i], tmp))
+    return win
+
+def stop_values(prog, p, value_fn, keys):
+    # stop[i] = P(p wins) after banking keys[i] (1 on a win, -inf for the empty tmp); bust_val = P(p wins) after a bust.
+    # value_fns with a banked method (value_net.FusedNet) evaluate the banked boards from the keys directly
+    if hasattr(value_fn, 'banked'):
+        win = _wins(prog, p, keys)
+        ask = ~win & (keys != 0)
+        v = value_fn.banked(prog, p, keys[ask])
+    else:
+        boards, win = _stop_boards(prog, p, keys)
+        ask = ~win & (keys != 0)
+        v = value_fn(np.concatenate([boards[ask], prog[None]]), 1 - p)
+    stop = np.where(win, 1.0, -np.inf)
+    stop[ask] = 1 - v[:-1]
+    return stop, 1 - v[-1]
+
+@njit(cache=True)
+def _fill(prog, p, keys, depth, child, stop, bust_val, limit):
+    # children advance >= 1, so visiting rows by decreasing total advance finalizes them before their parents
     n = len(keys)
     adv = np.zeros(n, np.int64)
+    t = np.zeros(13, np.int8)
     for i in range(n):
-        t = fr.decode(keys[i])
+        fr.decode_into(keys[i], t)
         for c in range(2, 13):
             if t[c] > 0:
                 adv[i] += t[c] - prog[p, c]
+    rank = adv.max() - adv
+    start = np.zeros(rank.max() + 2, np.int64)
+    for i in range(n):
+        start[rank[i] + 1] += 1
+    start = np.cumsum(start)
+    order = np.empty(n, np.int64)
+    for i in range(n):
+        order[start[rank[i]]] = i
+        start[rank[i]] += 1
+    ptr, cmv, crow = child
     best, go, pbust = stop.copy(), np.full(n, np.nan), np.full(n, np.nan)
-    cv = np.empty((13, 13))
-    mv = np.empty((fr.MAX_PICKS, 2), np.int8)
-    for i in np.argsort(-adv):
+    sv, uv = np.empty(13), np.empty(len(fr.UPAIRS))
+    for i in order:
         if depth[i] == limit or stop[i] >= 1.0:
             continue
-        t = fr.decode(keys[i])
-        ok = fr.legal_moves(prog, p, t)
-        cv[:] = -1.0
+        sv[:] = -1.0
+        for e in range(ptr[i], ptr[i + 1]):
+            if cmv[e] < 11:
+                sv[cmv[e] + 2] = best[crow[e]]
+        for u in range(len(uv)):
+            uv[u] = max(sv[fr.UPAIRS[u, 0]], sv[fr.UPAIRS[u, 1]])
+        for e in range(ptr[i], ptr[i + 1]):
+            if cmv[e] >= 11:
+                uv[cmv[e] - 11] = best[crow[e]]
         g = pb = 0.0
         for r in range(fr.N_ROLLS):
             v = -1.0
-            for j in range(fr.roll_moves(ok, r, mv)):
-                a, b = mv[j, 0], mv[j, 1]
-                if cv[a, b] < 0:
-                    cv[a, b] = best[index[fr.move_key(prog, p, t, keys[i], a, b)]]
-                v = max(v, cv[a, b])
+            for j in range(fr.ROLL_NPAIRS[r]):
+                v = max(v, uv[fr.ROLL_UPAIR[r, j]])
             if v < 0:
                 pb += fr.ROLL_PROB[r]
                 v = bust_val
@@ -66,20 +105,28 @@ def _fill(prog, p, keys, depth, index, stop, bust_val, limit):
         best[i] = max(stop[i], g)
     return best, go, pbust
 
+_graphs = {}  # (p, from turn start) -> (graph key, graph) of p's last such solve; a turn after a bust reuses it
+
+def turn_graph(prog, p, limit, k0):
+    # fr.enumerate_turn(..., children=True) (read-only), which depends on the board only via p's row and the blocked columns
+    gk = (prog[p].tobytes(), (prog.max(0) == fr.LEN).tobytes(), limit, k0)
+    hit = _graphs.get((p, k0 == 0))
+    if hit is None or hit[0] != gk:
+        keys, depth, index, child = fr.enumerate_turn(prog, p, limit, k0, children=True)
+        for a in (keys, depth, index.rows) + child:
+            a.flags.writeable = False
+        hit = _graphs[(p, k0 == 0)] = (gk, (keys, depth, index, child))
+    return hit[1]
+
 def solve_turn(prog, p, value_fn, depth=None, tmp=None):
     # solves the rest of the turn from tmp (default: turn start); winning stops are not expanded
     # depth k: min-roll-distance horizon, situations first reachable in k rolls must stop (a realizable policy, so a
     # lower bound, monotone in k; exact once k > max distance). From the empty tmp k is raised to 1 (it can't stop).
     k0 = 0 if tmp is None else fr.key(tmp)
     limit = -1 if depth is None else max(depth, int(k0 == 0))
-    keys, dep, index = fr.enumerate_turn(prog, p, limit, k0)
-    boards, win = _stop_boards(prog, p, keys)
-    ask = ~win & (keys != 0)
-    v = value_fn(np.concatenate([boards[ask], prog[None]]), 1 - p)
-    stop = np.where(win, 1.0, -np.inf)
-    stop[ask] = 1 - v[:-1]
-    bust_val = 1 - v[-1]
-    best, go, pbust = _fill(prog, p, keys, dep, index, stop, bust_val, limit)
+    keys, dep, index, child = turn_graph(prog, p, limit, k0)
+    stop, bust_val = stop_values(prog, p, value_fn, keys)
+    best, go, pbust = _fill(prog, p, keys, dep, child, stop, bust_val, limit)
     return Solution(prog, p, limit, keys, dep, index, best, stop, go, pbust, bust_val)
 
 def best_move(sol, tmp, roll):

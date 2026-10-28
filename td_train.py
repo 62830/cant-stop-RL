@@ -27,7 +27,7 @@ def bins(p, y, k=10):
     rows = [[b, float(p[idx == b].mean()), float(y[idx == b].mean()), int((idx == b).sum())] for b in range(k) if (idx == b).any()]
     return rows, float(sum(abs(r[1] - r[2]) * r[3] for r in rows) / len(p))
 
-# ---- workers: the value_fn source is a VH or a checkpoint path (loaded once per worker per snapshot)
+# ---- workers: the value_fn source is a VH or a checkpoint path (loaded once per worker per snapshot, as a FusedNet)
 _cache = {}
 
 def _vfn(src):
@@ -36,7 +36,7 @@ def _vfn(src):
     if src not in _cache:
         from value_net import NetV
         _cache.clear()
-        _cache[src] = NetV.load(src)
+        _cache[src] = NetV.load(src).fused()
     return _cache[src]
 
 def play(args):
@@ -106,7 +106,7 @@ def main():
     ap.add_argument('--resume', action='store_true')
     ap.add_argument('--minutes', type=float, default=90)
     ap.add_argument('--iters', type=int, default=10 ** 9)
-    ap.add_argument('--workers', type=int, default=8)
+    ap.add_argument('--workers', type=int, default=8, help='self-play processes, ~420 MB each; 12 is ~7%% faster if RAM allows')
     ap.add_argument('--games', type=int, default=96)
     ap.add_argument('--hidden', default='128,64')
     ap.add_argument('--buffer', type=int, default=15000)
