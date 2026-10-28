@@ -8,3 +8,4 @@ runs/*/cache
 runs/*/ckpt
 runs/*/DONE
 runs/*.log
+runs/*/train.pid

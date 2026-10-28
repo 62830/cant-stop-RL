@@ -43,14 +43,22 @@ def test_adapter_matches_forward():
     sol = solve_turn(progs[0], 0, v, depth=2)
     assert 0 <= sol.value(np.zeros(13, np.int8)) <= 1
 
-def test_tiny_training_iteration(tmp_path):
+def test_tiny_training_iteration_and_resume(tmp_path):
     cmd = [sys.executable, os.path.join(ROOT, 'td_train.py'), '--run', 'test', '--workers', '2', '--warm_games', '3', '--games', '2',
            '--iters', '1', '--n_resid', '4', '--calib_every', '1', '--hidden', '16,8']
-    subprocess.run(cmd, cwd=tmp_path, check=True, capture_output=True, env={**os.environ, 'PYTHONPATH': ROOT})
-    recs = [json.loads(l) for l in open(tmp_path / 'runs' / 'test' / 'metrics.jsonl')]
-    kinds = [r['kind'] for r in recs]
-    assert {'config', 'warm', 'update', 'iter', 'calib'} <= set(kinds)
+    run = lambda *extra: subprocess.run(cmd + list(extra), cwd=tmp_path, capture_output=True, env={**os.environ, 'PYTHONPATH': ROOT})
+    d = tmp_path / 'runs' / 'test'
+    assert run().returncode == 0
+    recs = [json.loads(l) for l in open(d / 'metrics.jsonl')]
+    assert {'config', 'warm', 'update', 'iter', 'calib'} <= {r['kind'] for r in recs}
     it = next(r for r in recs if r['kind'] == 'iter')
-    assert it['residual'] >= 0 and it['pairs'] > 0
-    assert (tmp_path / 'runs' / 'test' / 'ckpt' / 'it0001.pt').exists()
-    assert NetV.load(str(tmp_path / 'runs' / 'test' / 'ckpt' / 'it0001.pt'))(boards(5), 0).shape == (5,)
+    assert it['iter'] == 1 and it['residual'] >= 0 and it['pairs'] > 0
+    assert len(next(r for r in recs if r['kind'] == 'update')['loss']) == it['steps']
+    assert (d / 'DONE').exists() and not (d / 'train.pid').exists()
+    assert NetV.load(str(d / 'ckpt' / 'it0001.pt'))(boards(5), 0).shape == (5,)
+    assert run().returncode != 0  # existing run dir without --resume
+    assert run('--resume').returncode == 0
+    recs = [json.loads(l) for l in open(d / 'metrics.jsonl')]
+    assert [r['iter'] for r in recs if r['kind'] == 'resume'] == [1]
+    assert [r['iter'] for r in recs if r['kind'] == 'iter'] == [1, 2]
+    assert (d / 'ckpt' / 'it0002.pt').exists() and not list((d / 'ckpt').glob('*.tmp'))

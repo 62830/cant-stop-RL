@@ -24,23 +24,37 @@ def plain(ax):
         f(FormatStrFormatter('%.3g'))
 
 def smooth(y, k):
-    return np.convolve(y, np.ones(k) / k, 'valid') if len(y) >= k else y
+    # trailing k-mean, with x aligned to each window's last step
+    k = min(k, len(y))
+    return np.arange(k - 1, len(y)), np.convolve(y, np.ones(k) / k, 'valid')
+
+def mark_resumes(ax, xs):
+    for x in xs:
+        ax.axvline(x, color=INK2, lw=1, ls=':')
 
 def main(run='phase4', out=None):
     path = f'runs/{run}/metrics.jsonl'
     R = [json.loads(l) for l in open(path)]
     by = lambda k: [r for r in R if r['kind'] == k]
     it, up, cal, lad = by('iter'), by('update'), by('calib'), by('ladder')
+    resumes = [r['iter'] for r in by('resume')]
     fig, axs = plt.subplots(2, 3, figsize=(16, 9), facecolor=SURF)
-    fig.suptitle(f'TD training dashboard: runs/{run}', x=0.01, ha='left', color=INK, fontsize=14)
+    fig.suptitle(f'TD training dashboard: runs/{run}' + (f' (dotted: resumed at iter {resumes})' if resumes else ''), x=0.01, ha='left', color=INK, fontsize=14)
 
     ax = axs[0, 0]
     style(ax, 'Training loss (BCE vs soft solver targets)', 'update step')
     if up:
-        loss = np.array([r['loss'] for r in up])
+        # update records: one per step (loss float) or one per iteration (loss list)
+        per = [r['loss'] if isinstance(r['loss'], list) else [r['loss']] for r in up]
+        loss = np.concatenate(per)
+        start = np.cumsum([0] + [len(l) for l in per])
         ax.plot(loss, color=GRID, lw=1)
         k = 50
-        ax.plot(np.arange(len(smooth(loss, k))) + k - 1, smooth(loss, k), color=S[0], lw=2, label=f'{k}-step mean')
+        ax.plot(*smooth(loss, k), color=S[0], lw=2, label=f'{k}-step mean')
+        first = {}
+        for r, s0 in zip(up, start):
+            first.setdefault(r['iter'], s0)
+        mark_resumes(ax, [first[i] for i in resumes if i in first])
         ax.set_yscale('log')
         plain(ax)
         ax.legend(frameon=False, fontsize=8, labelcolor=INK2)
@@ -51,12 +65,14 @@ def main(run='phase4', out=None):
     if rs:
         x, y = zip(*rs)
         ax.plot(x, y, color=S[0], lw=2, marker='o', ms=4)
+        mark_resumes(ax, resumes)
         ax.set_yscale('log')
         plain(ax)
         ax.annotate(f'{y[-1]:.3f}', (x[-1], y[-1]), xytext=(4, 4), textcoords='offset points', color=INK, fontsize=8)
 
     ax = axs[0, 2]
     style(ax, 'Ladder win rate (95% Wilson CI)', 'snapshot iteration')
+    mark_resumes(ax, resumes)
     ax.axhline(0.5, color=INK2, lw=1, ls='--')
     for o, (name, c) in OPP.items():
         rr = sorted((r for r in lad if r['opp'] == o), key=lambda r: r['iter'])
@@ -87,12 +103,14 @@ def main(run='phase4', out=None):
 
     ax = axs[1, 1]
     style(ax, 'Self-play games/s (8 workers)', 'iteration')
+    mark_resumes(ax, resumes)
     if it:
         ax.plot([r['iter'] for r in it], [r['games_per_s'] for r in it], color=S[0], lw=2)
         ax.set_ylim(bottom=0)
 
     ax = axs[1, 2]
     style(ax, 'Mean solve time per turn start (s)', 'iteration')
+    mark_resumes(ax, resumes)
     if it:
         ax.plot([r['iter'] for r in it], [r['solve_s'] for r in it], color=S[0], lw=2)
         ax.set_ylim(bottom=0)

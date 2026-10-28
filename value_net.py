@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import torch
 from torch import nn
@@ -20,11 +21,11 @@ def make_net(hidden=(128, 64)):
     return nn.Sequential(*layers, nn.Linear(dims[-1], 1))
 
 class NetV:
-    # value_fn adapter: P(m wins) at the start of m's turn; single-threaded inference (one per worker)
+    # value_fn adapter: P(m wins) at the start of m's turn; torch threads are set only when unpickled/loaded
+    # (workers: 1 thread each), never as a side effect of construction
     def __init__(self, net, threads=1):
         self.net, self.threads = net.eval(), threads
         self.hidden = tuple(l.out_features for l in net if isinstance(l, nn.Linear))[:-1]
-        torch.set_num_threads(threads)
 
     @torch.inference_mode()
     def logits(self, progs, m):
@@ -40,9 +41,11 @@ class NetV:
         net = make_net(d['hidden'])
         net.load_state_dict(d['sd'])
         self.__init__(net, d['threads'])
+        torch.set_num_threads(self.threads)
 
     def save(self, path):
-        torch.save(self.__getstate__(), path)
+        torch.save(self.__getstate__(), path + '.tmp')
+        os.replace(path + '.tmp', path)
 
     @classmethod
     def load(cls, path, threads=1):
