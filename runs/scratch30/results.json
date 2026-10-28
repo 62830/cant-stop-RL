@@ -1,0 +1,106 @@
+{
+ "gate": {
+  "snapshot": 297,
+  "selected_by": "last snapshot (no selection)",
+  "vh": {
+   "p": 0.52,
+   "lo": 0.49808669426004354,
+   "hi": 0.5418366210359359,
+   "n": 2000,
+   "wall_s": 265.3
+  }
+ },
+ "gate_seg1_it74": {
+  "snapshot": 74,
+  "selected_by": "last snapshot (no selection)",
+  "vh": {
+   "p": 0.4945,
+   "lo": 0.472619415384223,
+   "hi": 0.5164016729093827,
+   "n": 2000,
+   "wall_s": 5638.9
+  },
+  "v2tuned": {
+   "p": 0.689,
+   "lo": 0.6596315221253087,
+   "hi": 0.7169219102090355,
+   "n": 1000,
+   "wall_s": 83.7
+  },
+  "v2": {
+   "p": 0.718,
+   "lo": 0.6893170177459294,
+   "hi": 0.7450144544704043,
+   "n": 1000,
+   "wall_s": 97.9
+  },
+  "note": "vh wall_s inflated (~20x the usual ~270 s) by unexplained CPU contention; the it297 gate took the normal 265 s"
+ },
+ "config": {
+  "cmd_seg1": "td_train.py --run scratch30 --minutes 30 --workers 8 --buffer 50000 --no_warm",
+  "cmd_seg2": "--resume --minutes 120 (lr 1e-3), stopped by user at iter 208 (~46 min)",
+  "cmd_seg3": "--resume --lr 1e-4 --minutes 74, stopped by user at iter 297 (~30 min)",
+  "note": "each resume starts a fresh replay buffer and optimizer; ladder td_ladder --workers 2 --n 160"
+ },
+ "init": {
+  "kind": "random (seed 0)",
+  "mae_held_vs_vh": 0.2095,
+  "ladder_it0": {
+   "vh": 0.219,
+   "v2tuned": 0.281,
+   "v2": 0.356
+  }
+ },
+ "segments": {
+  "seg1_lr1e-3_it1-74": {
+   "games": 7104,
+   "wall_s": 1814,
+   "residual_first_last": [
+    0.0566,
+    0.0177
+   ],
+   "residual_last8_mean": 0.0181,
+   "loss_mean": 0.658,
+   "games_per_s": 4.34
+  },
+  "seg2_lr1e-3_it75-208": {
+   "games": 12864,
+   "wall_s": 2721,
+   "residual_first_last": [
+    0.0165,
+    0.0067
+   ],
+   "residual_last8_mean": 0.0078,
+   "loss_mean": 0.539,
+   "loss_std": 0.0135,
+   "loss_p5_p95": [
+    0.518,
+    0.562
+   ],
+   "games_per_s": 4.84
+  },
+  "seg3_lr1e-4_it209-297": {
+   "games": 8544,
+   "wall_s": 1812,
+   "residual_first_last": [
+    0.0074,
+    0.0054
+   ],
+   "residual_last8_mean": 0.0059,
+   "loss_mean": 0.532,
+   "loss_std": 0.0116,
+   "loss_p5_p95": [
+    0.513,
+    0.551
+   ],
+   "games_per_s": 4.82
+  }
+ },
+ "training": {
+  "iters": 297,
+  "games": 28512,
+  "pairs": 307666,
+  "wall_s": 6348,
+  "ece_net_iter295": 0.0096
+ }
+}

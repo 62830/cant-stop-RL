@@ -118,6 +118,7 @@ def main():
     ap.add_argument('--resid_every', type=int, default=2)
     ap.add_argument('--calib_every', type=int, default=5)
     ap.add_argument('--seed', type=int, default=0)
+    ap.add_argument('--no_warm', action='store_true', help='skip the V_h fit: snapshot 0 is the randomly initialized (seeded) net')
     a = ap.parse_args()
     out = os.path.join('runs', a.run)
     ckdir = os.path.join(out, 'ckpt')
@@ -140,7 +141,7 @@ def main():
     X = lambda progs, ms: features(pov(progs, ms), 0)
     log(mf, kind='config', **vars(a), t=time.time())
     t0 = time.time()
-    H_progs, H_p, starts = heldout(pool, a, a.warm_games // 3 if a.resume else a.warm_games)
+    H_progs, H_p, starts = heldout(pool, a, a.warm_games // 3 if a.resume or a.no_warm else a.warm_games)
 
     if a.resume:
         it = int(prior[-1][2:6])
@@ -149,23 +150,25 @@ def main():
         last_t = max((json.loads(l).get('t', 0) for l in open(mf) if '"kind": "iter"' in l), default=0)
         log(mf, kind='resume', iter=it, t=last_t, note='fresh buffer and optimizer')
     else:
-        # warm start: fit the net to V_h on stop boards (queried for the opponent) + turn starts of the V_h games
-        parts = pool.map(stop_sample, [(r[0], r[1], 150, i) for i, r in enumerate(starts)])
-        wb, wm = np.concatenate([q[0] for q in parts]), np.concatenate([q[1] for q in parts])
-        wy = np.concatenate([BEST_VH(wb[wm == q], q) for q in (0, 1)])
-        wb, wm = np.concatenate([wb[wm == 0], wb[wm == 1]]), np.concatenate([wm[wm == 0], wm[wm == 1]])
         net = make_net(tuple(int(h) for h in a.hidden.split(',')))
-        opt = torch.optim.Adam(net.parameters())
-        WX = X(wb, wm)
-        for lr, steps in ((3e-3, 3000), (1e-3, 2000), (3e-4, 2000)):
-            for g in opt.param_groups:
-                g['lr'] = lr
-            fit(net, WX, wy, steps, 1024, opt)
+        info = dict(init='random')
+        if not a.no_warm:
+            # warm start: fit the net to V_h on stop boards (queried for the opponent) + turn starts of the V_h games
+            parts = pool.map(stop_sample, [(r[0], r[1], 150, i) for i, r in enumerate(starts)])
+            wb, wm = np.concatenate([q[0] for q in parts]), np.concatenate([q[1] for q in parts])
+            wy = np.concatenate([BEST_VH(wb[wm == q], q) for q in (0, 1)])
+            wb, wm = np.concatenate([wb[wm == 0], wb[wm == 1]]), np.concatenate([wm[wm == 0], wm[wm == 1]])
+            opt = torch.optim.Adam(net.parameters())
+            WX = X(wb, wm)
+            for lr, steps in ((3e-3, 3000), (1e-3, 2000), (3e-4, 2000)):
+                for g in opt.param_groups:
+                    g['lr'] = lr
+                fit(net, WX, wy, steps, 1024, opt)
+            info = dict(init='vh_fit', n_boards=len(wb), n_starts=len(starts), mae_stop=float(np.abs(NetV(net)(pov(wb, wm), 0) - wy).mean()))
         warm = NetV(copy.deepcopy(net))
         hp = np.concatenate([warm(H_progs[H_p == q], q) for q in (0, 1)])
         hv = np.concatenate([BEST_VH(H_progs[H_p == q], q) for q in (0, 1)])
-        print(log(mf, kind='warm', n_boards=len(wb), n_starts=len(starts), mae_stop=float(np.abs(warm(pov(wb, wm), 0) - wy).mean()),
-                  mae_held=float(np.abs(hp - hv).mean()), seconds=round(time.time() - t0, 1)), flush=True)
+        print(log(mf, kind='warm', **info, mae_held=float(np.abs(hp - hv).mean()), seconds=round(time.time() - t0, 1)), flush=True)
         it, last_t = 0, 0
         warm.save(ckpt(ckdir, 0))
 

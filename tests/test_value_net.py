@@ -62,3 +62,13 @@ def test_tiny_training_iteration_and_resume(tmp_path):
     assert [r['iter'] for r in recs if r['kind'] == 'resume'] == [1]
     assert [r['iter'] for r in recs if r['kind'] == 'iter'] == [1, 2]
     assert (d / 'ckpt' / 'it0002.pt').exists() and not list((d / 'ckpt').glob('*.tmp'))
+
+def test_tiny_training_no_warm(tmp_path):
+    cmd = [sys.executable, os.path.join(ROOT, 'td_train.py'), '--run', 'test', '--workers', '2', '--warm_games', '3', '--games', '2',
+           '--iters', '1', '--n_resid', '4', '--calib_every', '1', '--hidden', '16,8', '--no_warm']
+    assert subprocess.run(cmd, cwd=tmp_path, capture_output=True, env={**os.environ, 'PYTHONPATH': ROOT}).returncode == 0
+    d = tmp_path / 'runs' / 'test'
+    recs = [json.loads(l) for l in open(d / 'metrics.jsonl')]
+    assert next(r for r in recs if r['kind'] == 'warm')['init'] == 'random'
+    assert [r['iter'] for r in recs if r['kind'] == 'iter'] == [1]
+    assert (d / 'ckpt' / 'it0000.pt').exists() and (d / 'ckpt' / 'it0001.pt').exists()
