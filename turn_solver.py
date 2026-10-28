@@ -27,19 +27,32 @@ def _stop_boards(prog, p, keys):
     n = len(keys)
     boards = np.empty((n, 2, 13), np.int8)
     win = np.zeros(n, np.bool_)
+    tmp = np.zeros(13, np.int8)
     for i in range(n):
-        boards[i] = fr.apply_stop(prog, p, fr.decode(keys[i]))
-        win[i] = fr.score(boards[i], p) >= 3
+        fr.decode_into(keys[i], tmp)
+        boards[i] = fr.apply_stop(prog, p, tmp)
+        win[i] = fr.stop_wins(prog, p, tmp)
     return boards, win
+
+@njit(cache=True)
+def _wins(prog, p, keys):
+    win = np.zeros(len(keys), np.bool_)
+    tmp = np.zeros(13, np.int8)
+    for i in range(len(keys)):
+        win[i] = fr.stop_wins(prog, p, fr.decode_into(keys[i], tmp))
+    return win
 
 def stop_values(prog, p, value_fn, keys):
     # stop[i] = P(p wins) after banking keys[i] (1 on a win, -inf for the empty tmp); bust_val = P(p wins) after a bust.
-    # value_fns with a stop_values method (value_net.FusedNet) compute these from the keys directly
-    if hasattr(value_fn, 'stop_values'):
-        return value_fn.stop_values(prog, p, keys)
-    boards, win = _stop_boards(prog, p, keys)
-    ask = ~win & (keys != 0)
-    v = value_fn(np.concatenate([boards[ask], prog[None]]), 1 - p)
+    # value_fns with a banked method (value_net.FusedNet) evaluate the banked boards from the keys directly
+    if hasattr(value_fn, 'banked'):
+        win = _wins(prog, p, keys)
+        ask = ~win & (keys != 0)
+        v = value_fn.banked(prog, p, keys[ask])
+    else:
+        boards, win = _stop_boards(prog, p, keys)
+        ask = ~win & (keys != 0)
+        v = value_fn(np.concatenate([boards[ask], prog[None]]), 1 - p)
     stop = np.where(win, 1.0, -np.inf)
     stop[ask] = 1 - v[:-1]
     return stop, 1 - v[-1]
@@ -92,14 +105,17 @@ def _fill(prog, p, keys, depth, child, stop, bust_val, limit):
         best[i] = max(stop[i], g)
     return best, go, pbust
 
-_graphs = {}  # p -> (graph key, graph) of p's last solve; a turn after a bust reuses it
+_graphs = {}  # (p, from turn start) -> (graph key, graph) of p's last such solve; a turn after a bust reuses it
 
 def turn_graph(prog, p, limit, k0):
-    # fr.enumerate_turn(..., children=True), which depends on the board only via p's row and the blocked columns
+    # fr.enumerate_turn(..., children=True) (read-only), which depends on the board only via p's row and the blocked columns
     gk = (prog[p].tobytes(), (prog.max(0) == fr.LEN).tobytes(), limit, k0)
-    hit = _graphs.get(p)
+    hit = _graphs.get((p, k0 == 0))
     if hit is None or hit[0] != gk:
-        hit = _graphs[p] = (gk, fr.enumerate_turn(prog, p, limit, k0, children=True))
+        keys, depth, index, child = fr.enumerate_turn(prog, p, limit, k0, children=True)
+        for a in (keys, depth, index.rows) + child:
+            a.flags.writeable = False
+        hit = _graphs[(p, k0 == 0)] = (gk, (keys, depth, index, child))
     return hit[1]
 
 def solve_turn(prog, p, value_fn, depth=None, tmp=None):

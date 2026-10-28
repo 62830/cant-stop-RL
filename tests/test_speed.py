@@ -36,6 +36,7 @@ def test_situation_index():
     prog, p = _boards(1)[8]
     keys, _, index = fr.enumerate_turn(prog, p)
     assert keys[5] in index and index[keys[5]] == 5 and fr.key(fr.decode(keys[0]) + 1) not in index
+    assert all(k not in index for k in (-1, fr.STRIDE[12] * (fr.LEN[12] + 1), keys[5] + fr.STRIDE[12] * 100))
 
 def test_fused_matches_netv():
     n = 0
@@ -81,7 +82,7 @@ def test_graph_cache_across_bust():
     later[q, c] += 1
     ts.solve_turn(prog, p, VHB)
     hit = ts.solve_turn(later, p, VHB)
-    assert ts._graphs[p][1][0] is hit.keys
+    assert ts._graphs[(p, True)][1][0] is hit.keys
     ts._graphs.clear()
     np.testing.assert_array_equal(hit.best, ts.solve_turn(later, p, VHB).best)
     claimed = later.copy()
@@ -89,3 +90,27 @@ def test_graph_cache_across_bust():
     sol = ts.solve_turn(claimed, p, VHB)
     assert sol.keys is not hit.keys
     np.testing.assert_array_equal(sol.best, legacy.solve_turn(claimed, p, VHB).best)
+
+def test_fused_fallback_and_snapshot():
+    torch.manual_seed(1)
+    prog, p = _boards(1)[8]
+    for hidden in ((128,), (64, 32, 16)):
+        v = NetV(make_net(hidden))
+        assert v.fused() is v
+        a, b = legacy.solve_turn(prog, p, v), ts.solve_turn(prog, p, v.fused())
+        np.testing.assert_array_equal(a.best, b.best)
+    v = NetV(make_net((32, 16)))
+    f = v.fused()
+    progs = random_boards(50, 4)
+    before = f(progs, 0)
+    with torch.no_grad():
+        v.net[0].weight += 1.0
+    np.testing.assert_array_equal(f(progs, 0), before)
+
+def test_graph_cache_keeps_turn_start():
+    prog, p = _boards(1)[6]
+    ts._graphs.clear()
+    start = ts.solve_turn(prog, p, VHB)
+    ts.solve_turn(prog, p, VHB, tmp=fr.decode(start.keys[7]))
+    assert ts.solve_turn(prog, p, VHB).keys is start.keys
+    assert not start.keys.flags.writeable and not start.index.rows.flags.writeable

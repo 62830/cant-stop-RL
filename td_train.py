@@ -106,7 +106,7 @@ def main():
     ap.add_argument('--resume', action='store_true')
     ap.add_argument('--minutes', type=float, default=90)
     ap.add_argument('--iters', type=int, default=10 ** 9)
-    ap.add_argument('--workers', type=int, default=12)
+    ap.add_argument('--workers', type=int, default=8, help='self-play processes, ~420 MB each; 12 is ~7%% faster if RAM allows')
     ap.add_argument('--games', type=int, default=96)
     ap.add_argument('--hidden', default='128,64')
     ap.add_argument('--buffer', type=int, default=15000)

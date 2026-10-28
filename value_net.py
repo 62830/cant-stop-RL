@@ -1,9 +1,10 @@
-import os
+import os, copy
 import numpy as np
 import torch
 from torch import nn
 from numba import njit
-from fastrules import LEN, STRIDE
+import fastrules as fr
+from fastrules import LEN
 
 # features from m's POV: my thermometer, opp thermometer (cells 1..LEN-1 per column, 72 each), claimed by me, by opp
 COL = np.concatenate([np.full(LEN[c] - 1, c) for c in range(2, 13)])
@@ -45,7 +46,8 @@ class NetV:
         torch.set_num_threads(self.threads)
 
     def fused(self):
-        return FusedNet(self)
+        # the FusedNet kernel covers two hidden layers; other nets use the generic value_fn path
+        return FusedNet(self) if len(self.hidden) == 2 else self
 
     def save(self, path):
         torch.save(self.__getstate__(), path + '.tmp')
@@ -58,14 +60,13 @@ class NetV:
         return v
 
 class FusedNet:
-    # NetV (two hidden layers) plus a numba kernel for turn_solver.stop_values. A stop board differs from the turn start
-    # only in the mover's <= 3 tmp columns (thermometer cells + claim bit, and a claim resets the opponent's column), so
-    # h1 = W1 x(stop board) + b1 = h1(turn start) + per-(column, height) deltas; no feature matrix is built.
-    # Boards are evaluated as NetV does (P(to_move wins)); __call__ is the torch NetV itself
+    # a NetV (two hidden layers) snapshot with a numba kernel for turn_solver.stop_values. A banked board differs from the
+    # turn start only in the mover's <= 3 tmp columns (thermometer cells + claim bit, and a claim resets the opponent's
+    # column), so h1 = W1 x(board) + b1 = h1(turn start) + per-(column, height) deltas; no feature matrix is built
     def __init__(self, v):
-        self.v = v
-        l1, l2, l3 = [l.weight.detach().double().numpy() for l in v.net if isinstance(l, nn.Linear)]
-        b1, b2, b3 = [l.bias.detach().double().numpy() for l in v.net if isinstance(l, nn.Linear)]
+        self.v = copy.deepcopy(v)  # __call__ and the kernel share this snapshot
+        l1, l2, l3 = [l.weight.detach().double().numpy() for l in self.v.net if isinstance(l, nn.Linear)]
+        b1, b2, b3 = [l.bias.detach().double().numpy() for l in self.v.net if isinstance(l, nn.Linear)]
         # cum[blk, c, h] = W1 columns of the features on when column c of the blk (0 me, 1 opp) player is at height h
         cum = np.zeros((2, 13, 14, len(b1)))
         cells = np.cumsum(np.r_[0, LEN[2:12] - 1])
@@ -81,8 +82,9 @@ class FusedNet:
     def __call__(self, progs, m):
         return self.v(progs, m)
 
-    def stop_values(self, prog, p, keys):
-        return _fused_stop(prog, p, keys, *self.w)
+    def banked(self, prog, p, keys):
+        # self(boards banked by p with tmps keys from prog, then prog itself, 1 - p)
+        return _banked(prog, p, keys, *self.w)
 
     def __getstate__(self):
         return self.v.__getstate__()
@@ -95,8 +97,8 @@ class FusedNet:
 BLOCK = 32  # boards per layer-2 GEMM; 32 x 128 x 64 stays under OpenBLAS's multithreading threshold (single-threaded workers)
 
 @njit(cache=True, fastmath=True)
-def _flush(R, n, rows, w2t, b2, w3, b3, out):
-    # out[rows[:n]] = 1 - sigmoid(net) for the relu'd first-layer activations R[:n]
+def _flush(R, n, w2t, b2, w3, b3, out, at):
+    # out[at:at + n] = sigmoid(net) for the relu'd first-layer activations R[:n]
     Z = R[:n] @ w2t
     for b in range(n):
         z = b3
@@ -104,17 +106,15 @@ def _flush(R, n, rows, w2t, b2, w3, b3, out):
             a = Z[b, j] + b2[j]
             if a > 0:
                 z += a * w3[j]
-        out[rows[b]] = 1 - 1 / (1 + np.exp(-z))
+        out[at + b] = 1 / (1 + np.exp(-z))
 
 @njit(cache=True)
-def _fused_stop(prog, p, keys, cum, b1, w2t, b2, w3, b3):
-    # turn_solver.stop_values for the net (queried for the opponent m = 1 - p, so p's columns are the "opp" block)
-    m, n1 = 1 - p, len(b1)
+def _banked(prog, p, keys, cum, b1, w2t, b2, w3, b3):
+    # queried for the opponent m = 1 - p, so p's columns are the "opp" block
+    m, n1, n = 1 - p, len(b1), len(keys)
     base = b1.copy()
-    owned = 0
     for c in range(2, 13):
         base += cum[0, c, prog[m, c]] + cum[1, c, prog[p, c]]
-        owned += prog[p, c] == LEN[c]
     delta = np.zeros((13, 14, n1), np.float32)
     for c in range(2, 13):
         for h in range(prog[p, c] + 1, LEN[c] + 1):
@@ -123,34 +123,21 @@ def _fused_stop(prog, p, keys, cum, b1, w2t, b2, w3, b3):
                 d = d - cum[0, c, prog[m, c]]
             delta[c, h] = d.astype(np.float32)
     base32 = base.astype(np.float32)
-    R, rows = np.empty((BLOCK, n1), np.float32), np.empty(BLOCK, np.int64)
-    cs, hs = np.zeros(3, np.int64), np.zeros(3, np.int64)
-    stop = np.empty(len(keys) + 1)
-    nb = 0
-    for i in range(len(keys) + 1):
-        k = keys[i] if i < len(keys) else 0
-        if k == 0 and i < len(keys):
-            stop[i] = -np.inf
-            continue
-        w, nc = owned, 0
-        for c in range(12, 1, -1):
-            h = k // STRIDE[c]
-            if h > 0:
-                k -= h * STRIDE[c]
-                cs[nc], hs[nc] = c, h
-                nc += 1
-                w += h == LEN[c]
-        if w >= 3:
-            stop[i] = 1.0
-            continue
-        for c in range(nc, 3):
-            cs[c], hs[c] = 0, 0
-        d0, d1, d2 = delta[cs[0], hs[0]], delta[cs[1], hs[1]], delta[cs[2], hs[2]]
+    R, out = np.empty((BLOCK, n1), np.float32), np.empty(n + 1)
+    tmp, cs = np.zeros(13, np.int8), np.zeros(3, np.int64)
+    for i in range(n + 1):
+        cs[:] = 0
+        if i < n:
+            fr.decode_into(keys[i], tmp)
+            nc = 0
+            for c in range(2, 13):
+                if tmp[c] > 0:
+                    cs[nc] = c
+                    nc += 1
+        d0, d1, d2 = delta[cs[0], tmp[cs[0]]], delta[cs[1], tmp[cs[1]]], delta[cs[2], tmp[cs[2]]]
+        b = i % BLOCK
         for j in range(n1):
-            R[nb, j] = max(base32[j] + d0[j] + d1[j] + d2[j], 0)
-        rows[nb] = i
-        nb += 1
-        if nb == BLOCK or i == len(keys):
-            _flush(R, nb, rows, w2t, b2, w3, b3, stop)
-            nb = 0
-    return stop[:-1], stop[-1]
+            R[b, j] = max(base32[j] + d0[j] + d1[j] + d2[j], 0)
+        if b == BLOCK - 1 or i == n:
+            _flush(R, b + 1, w2t, b2, w3, b3, out, i - b)
+    return out

@@ -83,6 +83,9 @@ class Index:
         self.rows, self.n = rows, n
 
     def get(self, k):
+        # -1 unless k is a valid key (heights <= LEN, <= 3 markers) of a row
+        if not 0 <= k < STRIDE[12] * (LEN[12] + 1):
+            return -1
         s = slot(decode(k))
         return -1 if s < 0 else int(self.rows[s])
 
