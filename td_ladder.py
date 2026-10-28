@@ -15,7 +15,7 @@ def it_of(path):
     return int(os.path.basename(path)[2:6])
 
 def agent(path):
-    return partial(SolverAgent, NetV.load(path)) if path != 'vh' else partial(SolverAgent, BEST_VH)
+    return partial(SolverAgent, NetV.load(path).fused()) if path != 'vh' else partial(SolverAgent, BEST_VH)
 
 def match(mf, it, name, a, b, n, workers, seed):
     t = time.time()
