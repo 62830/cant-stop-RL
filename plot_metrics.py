@@ -86,7 +86,8 @@ def main(run='phase4', out=None):
         ax.errorbar(r['iter'] + 1.5, r['p'], [[r['p'] - r['lo']], [r['hi'] - r['p']]], color=c, marker='D', ms=7, capsize=3,
                     mec=SURF, mew=1.5, ls='none')
     ax.set_ylim(0.2, 1.0)
-    ax.legend(frameon=False, fontsize=8, labelcolor=INK2, loc='lower left', title='diamonds: final gate, n=1000' if gate else None,
+    gate_n = '/'.join(str(n) for n in sorted({r['n'] for r in gate}, reverse=True))
+    ax.legend(frameon=False, fontsize=8, labelcolor=INK2, loc='lower left', title=f'diamonds: final gate, n={gate_n}' if gate else None,
               title_fontsize=8)
 
     ax = axs[1, 0]
@@ -94,7 +95,8 @@ def main(run='phase4', out=None):
     ax.plot([0, 1], [0, 1], color=INK2, lw=1, ls='--')
     if cal:
         first, last = cal[0], cal[-1]
-        for b, label, c in ((first['warm'], f"warm start (ECE {first['ece_warm']:.3f})", S[1]),
+        ref = 'initial random net' if any(r.get('no_warm') for r in by('config')) else 'warm start'
+        for b, label, c in ((first['warm'], f"{ref} (ECE {first['ece_warm']:.3f})", S[1]),
                             (last['net'], f"iter {last['iter']} snapshots (ECE {last['ece_net']:.3f})", S[0])):
             b = np.array(b)
             ax.plot(b[:, 1], b[:, 2], color=c, lw=2, marker='o', ms=5, label=label)
