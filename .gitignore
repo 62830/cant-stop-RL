@@ -5,3 +5,7 @@ model_weights
 !requirements.txt
 __pycache__
 runs/*/cache
+runs/*/ckpt
+runs/*/DONE
+runs/*.log
+runs/*/train.pid
