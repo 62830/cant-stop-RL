@@ -82,7 +82,7 @@ def main(run='phase4', out=None):
             ax.plot(x, [r['p'] for r in rr], color=c, lw=2, marker='o', ms=5, label=name)
     gate = [r for r in lad if r['opp'].startswith('gate_')]
     for r in gate:
-        name, c = OPP[r['opp'][5:]]
+        name, c = OPP.get(r['opp'][5:], (r['opp'][5:], INK))  # other gate opponents (e.g. a snapshot) in ink
         ax.errorbar(r['iter'] + 1.5, r['p'], [[r['p'] - r['lo']], [r['hi'] - r['p']]], color=c, marker='D', ms=7, capsize=3,
                     mec=SURF, mew=1.5, ls='none')
     ax.set_ylim(0.2, 1.0)
