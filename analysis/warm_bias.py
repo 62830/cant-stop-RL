@@ -7,7 +7,7 @@ sys.path.insert(0, ROOT)
 import fastrules as fr
 from game import State
 from solver_agent import SolverAgent, tmp_of
-from td_train import BEST_VH, ZERO
+from td_train import BEST_VH, ZERO, _vfn
 from branching import load_sets
 
 # How far do V_h (H) and the warm-started td30 (T) deviate from scratch30's final net (S, the V_h-unbiased reference)?
@@ -16,7 +16,7 @@ from branching import load_sets
 ARCH = os.path.join(os.path.dirname(ROOT), 'cant_stop_archive')
 NAMES = ('S', 'H', 'T', 'S74', 'S208', 'S280')
 XS = NAMES[1:]
-SEEDS = dict(P_H=10000, P_T=30000, P_S=30100)
+SEED0 = dict(P_H=10000, P_T=30000)  # P_S starts right after P_T's games
 GO, STOP = -1, -2
 
 def game_job(args):
@@ -24,7 +24,7 @@ def game_job(args):
     # Returns turn starts (prog, p, raw [k], solved [k]) and decisions (turn, is_pick, choice keys [k], regret under S [k])
     srcs, player, seed = args
     names = list(srcs)
-    vs = [_vfn_multi(srcs[n]) for n in names]
+    vs = [_vfn(srcs[n], keep=True) for n in names]
     agents = [SolverAgent(v) for v in vs]
     random.seed(seed)
     s, starts, decs = State(), [], []
@@ -36,7 +36,8 @@ def game_job(args):
         if len(legal) > 1:
             go = s.is_wait_for_go()
             kf = (lambda a: GO if a.is_go() else STOP) if go else (lambda a: fr.key(tmp_of(*s.unsafe_pick(a))))
-            ch = [kf(a.act(s)) for a in agents]
+            acts = [a.act(s) for a in agents]
+            ch = [kf(a) for a in acts]
             sol, (_, _, tmp) = agents[0].sol, fr.from_state(s)  # agents[0] is S
             i = sol.row(tmp)
             if not go and np.isnan(sol.go[i]):  # going on from a winning stop: every pick wins
@@ -45,25 +46,17 @@ def game_job(args):
                 val = {GO: sol.go[i], STOP: sol.stop[i]} if go else {kf(a): sol.value(tmp_of(*s.unsafe_pick(a))) for a in legal}
                 reg = [0.0 if np.isnan(val[c]) else float(val[ch[0]] - val[c]) for c in ch]
             decs.append((len(starts) - 1, not go, ch, reg))
-        act = agents[names.index(player)].act(s) if len(legal) > 1 else legal[0]
-        s, _ = s.update(act)
+        s, _ = s.update(acts[names.index(player)] if len(legal) > 1 else legal[0])
     return starts, decs
 
-_vc = {}
-
-def _vfn_multi(src):
-    # td_train._vfn keeps one net per worker; here several are live at once
-    if isinstance(src, str) and src not in _vc:
-        from value_net import NetV
-        _vc[src] = NetV.load(src).fused()
-    return _vc[src] if isinstance(src, str) else src
+def seeds(games):
+    return dict(SEED0, P_S=SEED0['P_T'] + games)
 
 def collect(pool, srcs, games):
     # -> per set: turn-start arrays and decision arrays, with game ids
-    out = {}
+    out, s0 = {}, seeds(games)
     for name, player in (('P_H', 'H'), ('P_T', 'T'), ('P_S', 'S')):
-        seeds = range(SEEDS[name], SEEDS[name] + games)
-        res = pool.map(game_job, [(srcs, player, g) for g in seeds], chunksize=1)
+        res = pool.map(game_job, [(srcs, player, g) for g in range(s0[name], s0[name] + games)], chunksize=1)
         st = [(g,) + r for g, (s, _) in enumerate(res) for r in s]
         dc = [(g,) + r for g, (_, d) in enumerate(res) for r in d]
         out[name] = dict(game=np.array([r[0] for r in st]), prog=np.array([r[1] for r in st], np.int8),
@@ -72,7 +65,7 @@ def collect(pool, srcs, games):
                          d_regret=np.array([r[4] for r in dc]))
     return out
 
-def select_ph(d, n=900, seed0=SEEDS['P_H']):
+def select_ph(d, n=900, seed0=SEED0['P_H']):
     # branch_diag / branching.build_sets' visited sample of the V_h games' turn starts
     return np.random.default_rng(seed0).choice(len(d['p']), min(n, len(d['p'])), replace=False)
 
@@ -102,13 +95,10 @@ def position_metrics(V, cl, n, W):
         A = cluster_sums([np.abs(d), d * d, d, one, d * x, x * x], cl, n)
         r[k] = dict(mean_abs=stat(A, W, lambda s: s[0] / s[3]), rms=stat(A, W, lambda s: np.sqrt(s[1] / s[3])),
                     signed=stat(A, W, lambda s: s[2] / s[3]), beta=stat(A, W, lambda s: s[4] / s[5]))
-    y = T - S
-    A = cluster_sums([x * y, x * x, np.abs(y), np.abs(x), np.abs(S74 - S), one], cl, n)
-    r['beta'] = stat(A, W, lambda s: s[0] / s[1])
-    r['ratio_T_H'] = stat(A, W, lambda s: s[2] / s[3])
-    r['diff_T_S74'] = stat(A, W, lambda s: (s[2] - s[4]) / s[5])
-    A = cluster_sums([x * x, x * x], cl, n)
-    r['beta_HH'] = float(A[:, 0].sum() / A[:, 1].sum())  # sanity: T := H gives 1
+    r['beta'], r['beta_HH'] = r['T']['beta'], r['H']['beta']['est']  # sanity: the beta path with y = H - S gives 1
+    A = cluster_sums([np.abs(T - S), np.abs(x), np.abs(S74 - S), one], cl, n)
+    r['ratio_T_H'] = stat(A, W, lambda s: s[0] / s[1])
+    r['diff_T_S74'] = stat(A, W, lambda s: (s[0] - s[2]) / s[3])
     return r
 
 def decision_metrics(D, n_turns_per_game, n, W):
@@ -169,20 +159,20 @@ RULE = ('Pre-registered (pooled positions; (1),(2) must hold for both raw V and 
 
 def trend(ph, run_dirs, every):
     # forward passes on P_H: mean |V - S| and |V - H| per snapshot
-    from value_net import NetV
     prog, p = ph['prog'][ph['sel']], ph['p'][ph['sel']]
     S, H = ph['raw'][ph['sel'], 0], ph['raw'][ph['sel'], 1]
     out = {}
     for run, d in run_dirs.items():
-        cs = sorted(glob.glob(os.path.join(d, 'it*.pt')))
+        it = lambda c: int(os.path.basename(c)[2:-3])
+        cs = sorted(glob.glob(os.path.join(d, 'it*.pt')), key=it)
         cs = cs[::every] + ([cs[-1]] if (len(cs) - 1) % every else [])
         rows = []
         for c in cs:
-            v = NetV.load(c)
+            v = _vfn(c)  # fused, as the S / H reference values
             x = np.empty(len(p))
             for q in (0, 1):
                 x[p == q] = v(prog[p == q], q)
-            rows.append([int(os.path.basename(c)[2:6]), float(np.abs(x - S).mean()), float(np.abs(x - H).mean())])
+            rows.append([it(c), float(np.abs(x - S).mean()), float(np.abs(x - H).mean())])
         out[run] = rows
     return out
 
@@ -212,13 +202,16 @@ def main():
     print(f'games done {time.time() - t0:.0f}s', flush=True)
     ph = data['P_H']
     ph['sel'] = select_ph(ph, a.n_ph)
+    ph_check = 'skipped'
     if a.games == 100 and a.n_ph == 900 and os.path.exists(a.r7):
         vb, vm = load_sets(a.r7)['visited'][:2]
         assert np.array_equal(ph['prog'][ph['sel']], vb) and np.array_equal(ph['p'][ph['sel']], vm), 'P_H != branch_diag set'
+        ph_check = 'passed'
+    print(f'P_H == branch_diag visited set check: {ph_check}', flush=True)
     np.savez_compressed(os.path.join(a.out, 'data.npz'), names=np.array(NAMES),
                         **{f'{k}__{f}': v for k, d in data.items() for f, v in d.items()})
     res = analyze(data, a.boot)
-    res.update(rule=RULE, **verdict(res), names=list(NAMES), seeds=SEEDS, games=a.games,
+    res.update(rule=RULE, **verdict(res), names=list(NAMES), seeds=seeds(a.games), games=a.games, ph_check=ph_check,
                sources={k: os.path.relpath(v, ROOT) if isinstance(v, str) else repr(v)
                         for k, v in srcs.items()})
     res['trend'] = trend(ph, dict(scratch30=a.scratch_ckpt, td30=a.td_ckpt), a.every)
