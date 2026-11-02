@@ -33,12 +33,14 @@ def bins(p, y, k=10):
 # ---- workers: the value_fn source is a VH or a checkpoint path (loaded once per worker per snapshot, as a FusedNet)
 _cache = {}
 
-def _vfn(src):
+def _vfn(src, keep=False):
+    # keep: hold every loaded snapshot (several live at once) instead of only the last
     if not isinstance(src, str):
         return src
     if src not in _cache:
         from value_net import NetV
-        _cache.clear()
+        if not keep:
+            _cache.clear()
         _cache[src] = NetV.load(src).fused()
     return _cache[src]
 
