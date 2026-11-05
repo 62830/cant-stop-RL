@@ -104,7 +104,7 @@ def test_heldout_excluded_and_sets_io(tmp_path):
 def test_paired_eval():
     v = VH('top3', (4.0,))
     mk = lambda: SolverAgent(v)
-    assert _pairs((mk, mk, range(4))) == [0.5] * 4  # deterministic self-play: each pair splits exactly
+    assert [x[0] + y[0] for x, y in _pairs((mk, mk, range(4), None))] == [1.0] * 4  # deterministic self-play: pairs split
     dice = []
     roll = game.State.roll_dice
     def rec(self):
