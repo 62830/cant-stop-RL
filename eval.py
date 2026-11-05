@@ -1,10 +1,11 @@
-import os, math, random, pickle
+import os, math, random
 os.environ.setdefault('OPENBLAS_NUM_THREADS', '1')
 from multiprocessing import Pool
 import numpy as np
 import fastrules as fr
 from game import Game, State
-from solver_agent import SolverAgent, tmp_of
+
+Z_POWER = 1.96 + 0.84  # alpha 0.05 two-sided, 80% power
 
 def wilson(wins, n, z=1.96):
     p = wins / n
@@ -37,33 +38,28 @@ def evaluate(make_a, make_b, n=2000, workers=8, seed=0):
 def roll_luck(ref, s):
     # chance event at s (dice just rolled, a pick or bust pending): (A_t, E_t) for the mover under the reference solver
     # ref (a SolverAgent): E_t = go value at the current tmp, A_t = best pick value after the roll (bust value on a bust).
-    # None where go is undefined (going on from a winning stop)
+    # None when going on from a winning stop (no go value; checked before solving, which would not expand it)
+    from solver_agent import tmp_of
     prog, p, tmp = fr.from_state(s)
-    sol = ref.solution(prog, p, tmp)
-    e = sol.go[sol.row(tmp)]
-    if np.isnan(e):
+    if fr.stop_wins(prog, p, tmp):
         return None
+    sol = ref.solution(prog, p, tmp)
     legal = s.get_legal_actions()
     a = sol.bust_val if legal[0].is_null() else max(sol.value(tmp_of(*s.unsafe_pick(x))) for x in legal)
-    return a, e
+    return a, sol.go[sol.row(tmp)]
 
 def _game(a, b, seed, a_first, ref=None):
     # (1 if A wins the game with dice seed `seed`, sum of A's luck L_t = A_t - E_t over chance events, number of events).
-    # ref: (R for A's turns, R for B's turns), each a SolverAgent solving with the reference value_fn (the mover itself
-    # when it is one, reusing its solves)
+    # ref: None, or (R for A's turns, R for B's turns), SolverAgents solving with the reference value_fn
     random.seed(seed)
-    a.reset()
-    b.reset()
-    if ref is None:
-        score = Game([a, b] if a_first else [b, a]).play()
-        return float(score[0 if a_first else 1] >= 3), 0.0, 0
-    for r in ref:
-        r.reset()
-    agents, refs, me = ([a, b], ref, 0) if a_first else ([b, a], ref[::-1], 1)
+    agents, me = ([a, b], 0) if a_first else ([b, a], 1)
+    for x in agents + list(ref or ()):
+        x.reset()
+    refs = ref if ref is None or a_first else ref[::-1]
     s, luck, n = State(), 0.0, 0
     while not s.is_terminal():
         act = agents[s.cur_agent_idx].act(s)
-        if not s.wait_for_go and not s.end_turn:
+        if refs and not s.wait_for_go and not s.end_turn:
             r = roll_luck(refs[s.cur_agent_idx], s)
             if r is not None:
                 luck += (r[0] - r[1]) * (1 if s.cur_agent_idx == me else -1)
@@ -71,45 +67,57 @@ def _game(a, b, seed, a_first, ref=None):
         s, _ = s.update(act)
     return float(s.get_winner() == me), luck, n
 
-def _is_ref(agent, ref):
-    return (type(agent) is SolverAgent and agent.depth is None and not (agent.v2_picks or agent.v2_gostop)
-            and pickle.dumps(agent.value_fn) == pickle.dumps(ref))
-
 def _pairs(args):
+    # an agent built around the very ref object (pickled in the same job, so identity survives) doubles as R
     make_a, make_b, seeds, ref = args
     a, b = make_a(), make_b()
     if ref is not None:
+        from solver_agent import SolverAgent
         r = SolverAgent(ref)
-        ref = tuple(x if _is_ref(x, ref) else r for x in (a, b))
+        ref = tuple(x if type(x) is SolverAgent and x.value_fn is ref and x.depth is None and not (x.v2_picks or x.v2_gostop)
+                    else r for x in (a, b))
     return [(_game(a, b, g, True, ref), _game(a, b, g, False, ref)) for g in seeds]
 
-def _ci(x):
-    m, h = x.mean(), 1.96 * x.std(ddof=1) / math.sqrt(len(x))
-    return float(m), (float(m - h), float(m + h))
+def _sd(x):
+    return float(math.sqrt(((x - x.mean()) ** 2).sum() / max(len(x) - 1, 1)))
 
-def evaluate_paired(make_a, make_b, n=1000, workers=8, seed=0, ref=None, detail=False):
-    # n pairs: pair g plays dice seed g with A first, then the same seed with B first (identical decisions consume identical
-    # dice). Returns A's mean pair score (0 / 0.5 / 1 per pair) and a 95% normal CI over pairs.
-    # ref (a value_fn): also luck-adjust with the reference solver R = solve_turn(., ., ref): each game scores
-    # Y = result - sum_t (A_t - E_t) over chance events (rolls), A's view; an unbiased control variate. Returns a dict
-    # (raw and adjusted mean, CI, SD; luck diagnostics; with detail, per-game arrays [n, 2] for A first / B first)
+def _ci(x):
+    m, h = float(x.mean()), 1.96 * _sd(x) / math.sqrt(len(x))
+    return m, (m - h, m + h)
+
+def n_needed(sd, mde):
+    # pairs for a minimum detectable edge mde (win-rate fraction) at Z_POWER
+    return (Z_POWER * sd / mde) ** 2
+
+def paired_stats(res, luck, events):
+    # res, luck, events [n, 2] (A first, B first; A's view). CIs over pairs. luck_first: the first mover's mean luck
+    raw, adj = res.mean(1), (res - luck).mean(1)
+    return dict(n=len(res), raw=_ci(raw), adj=_ci(adj), sd_raw=_sd(raw), sd_adj=_sd(adj), luck=_ci(luck.mean(1)),
+                luck_first=_ci((luck[:, 0] - luck[:, 1]) / 2), luck_sd_game=_sd(luck.ravel()), events=float(events.mean()))
+
+def _run_pairs(make_a, make_b, n, workers, seed, ref):
     seeds = [seed * 1000003 + g for g in range(n)]
-    jobs = [(make_a, make_b, seeds[i::2 * workers], ref) for i in range(2 * workers)]
     with Pool(workers) as pool:
-        parts = pool.map(_pairs, jobs)
+        parts = pool.map(_pairs, [(make_a, make_b, seeds[i::2 * workers], ref) for i in range(2 * workers)])
     out = np.empty((n, 2, 3))
     for i, part in enumerate(parts):
-        out[i::2 * workers] = part
-    res, luck, events = out[..., 0], out[..., 1], out[..., 2]
-    raw = res.mean(1)
-    if ref is None:
-        return _ci(raw)
-    adj = (res - luck).mean(1)
-    d = dict(n=n, raw=_ci(raw), adj=_ci(adj), sd_raw=float(raw.std(ddof=1)), sd_adj=float(adj.std(ddof=1)),
-             luck=_ci(luck.ravel()), luck_sd=float(luck.std(ddof=1)), events=float(events.mean()))
-    if detail:
-        d.update(result=res, luck_sum=luck, n_events=events)
-    return d
+        if part:
+            out[i::2 * workers] = part
+    return out[..., 0], out[..., 1], out[..., 2]
+
+def evaluate_paired(make_a, make_b, n=1000, workers=8, seed=0, ref=None):
+    # n pairs: pair g plays dice seed g with A first, then the same seed with B first (identical decisions consume identical
+    # dice). Returns A's mean pair score (0 / 0.5 / 1 per pair) and a 95% normal CI over pairs.
+    # ref (a value_fn): the luck-adjusted score instead (see evaluate_paired_detail), same estimand, less variance
+    d = evaluate_paired_detail(make_a, make_b, n, workers, seed, ref)
+    return d['adj' if ref is not None else 'raw']
+
+def evaluate_paired_detail(make_a, make_b, n=1000, workers=8, seed=0, ref=None):
+    # paired_stats plus per-game arrays result, luck_sum, n_events [n, 2]. With ref, luck adjustment by the reference solver
+    # R = solve_turn(., ., ref): each game also scores Y = result - sum_t (A_t - E_t) over chance events (every roll), A's
+    # view; E[A_t - E_t] = 0 at each roll, so Y is an unbiased control variate. Without ref luck is 0 (adj = raw)
+    res, luck, events = _run_pairs(make_a, make_b, n, workers, seed, ref)
+    return dict(paired_stats(res, luck, events), result=res, luck_sum=luck, n_events=events)
 
 if __name__ == '__main__':
     from baselines import RandomAgent, V2, V2Tuned

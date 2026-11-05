@@ -18,11 +18,12 @@ def it_of(path):
 def agent(path):
     return partial(SolverAgent, NetV.load(path).fused()) if path != 'vh' else partial(SolverAgent, BEST_VH)
 
-def match(mf, it, name, a, b, n, workers, seed, paired=False):
-    # paired: n pairs of games (branching spec R8), CI over pairs
+def match(mf, it, name, a, b, n, workers, seed, paired=False, ref=None):
+    # paired: n pairs of games (branching spec R8), CI over pairs; ref (paired only): luck-adjusted by that value_fn's solver
     t = time.time()
-    p, (lo, hi) = (evaluate_paired if paired else evaluate)(a, b, n, workers, seed)
-    return json.loads(log(mf, kind='ladder', iter=it, opp=name, p=p, lo=lo, hi=hi, n=n, paired=paired, ci='normal over pairs' if paired else 'wilson', wall_s=round(time.time() - t, 1)))
+    p, (lo, hi) = evaluate_paired(a, b, n, workers, seed, ref) if paired else evaluate(a, b, n, workers, seed)
+    return json.loads(log(mf, kind='ladder', iter=it, opp=name, p=p, lo=lo, hi=hi, n=n, paired=paired, ci='normal over pairs' if paired else 'wilson',
+                          wall_s=round(time.time() - t, 1), **({} if ref is None else dict(luck_ref=repr(ref)))))
 
 def trainer_alive(run):
     # td_train writes runs/<run>/train.pid and removes it on a clean exit

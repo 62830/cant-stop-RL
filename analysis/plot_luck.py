@@ -1,13 +1,14 @@
 # figures from runs/luck/{results.json, pairs.npz} (written by analysis/luck_pilot.py); reads saved results only
-import os, json
+import os, sys, json
 import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+from eval import n_needed
 OUT = os.path.join(ROOT, 'runs', 'luck')
 RAW, ADJ, INK, INK2, GRID, BG = '#2a78d6', '#eb6834', '#0b0b0b', '#52514e', '#e4e3df', '#fcfcfb'
-Z = 2.80
 plt.rcParams.update({'font.size': 11, 'axes.edgecolor': INK2, 'axes.labelcolor': INK, 'xtick.color': INK2, 'ytick.color': INK2,
                      'axes.spines.top': False, 'axes.spines.right': False, 'figure.facecolor': BG, 'axes.facecolor': BG,
                      'axes.grid': True, 'grid.color': GRID, 'grid.linewidth': 0.8, 'axes.axisbelow': True})
@@ -39,8 +40,8 @@ def main():
     mde = np.linspace(0.25, 2, 200)
     fig, ax = plt.subplots(figsize=(8, 4.6))
     for k, c, lab in (('raw', RAW, 'raw'), ('adj', ADJ, 'luck-adjusted')):
-        n = (Z * m['sd_' + k] / (mde / 100)) ** 2
-        lo, hi = [(Z * s / (mde / 100)) ** 2 for s in b['sd_' + k]]
+        n = n_needed(m['sd_' + k], mde / 100)
+        lo, hi = [n_needed(s, mde / 100) for s in b['sd_' + k]]
         ax.fill_between(mde, lo, hi, color=c, alpha=0.18, lw=0)
         ax.plot(mde, n, color=c, lw=2)
         n5 = res['n_needed']['0.5'][k]['n']

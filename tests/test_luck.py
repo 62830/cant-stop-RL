@@ -1,4 +1,5 @@
 import os, sys, copy, random
+from functools import partial
 from itertools import product
 import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -8,7 +9,7 @@ from game import Game
 from baselines import V2
 from solver_agent import SolverAgent
 from td_train import BEST_VH
-from eval import roll_luck, _game
+from eval import roll_luck, _game, evaluate_paired, evaluate_paired_detail
 
 def _roll_states(n_games=6, seed=0):
     # (state, mover's P(bust)) at every chance event of a few solver-vs-v2 games
@@ -50,7 +51,7 @@ def test_luck_only_at_rolls():
     def rec(self):
         rolls[0] += 1
         roll(self)
-    mk = lambda: SolverAgent(BEST_VH)
+    mk = partial(SolverAgent, BEST_VH)
     for seed in range(3):
         for a_first in (True, False):
             w0 = _game(mk(), V2(), seed, a_first)[0]
@@ -62,3 +63,12 @@ def test_luck_only_at_rolls():
             finally:
                 game.State.roll_dice = roll
             assert w == w0 and n == rolls[0] > 10 and np.isfinite(luck)
+
+def test_small_n():
+    # fewer pairs than jobs (empty jobs), n = 1 (finite zero-width CI); ref path returns the adjusted (p, (lo, hi))
+    for n in range(1, 21):
+        p, (lo, hi) = evaluate_paired(V2, V2, n, workers=4, seed=n)
+        assert lo <= p <= hi and np.isfinite([lo, hi]).all()
+    d = evaluate_paired_detail(V2, partial(SolverAgent, BEST_VH), 3, workers=2, seed=1, ref=BEST_VH)
+    assert d['result'].shape == (3, 2) and (d['n_events'] > 0).all()
+    assert evaluate_paired(V2, partial(SolverAgent, BEST_VH), 3, workers=2, seed=1, ref=BEST_VH) == d['adj']
