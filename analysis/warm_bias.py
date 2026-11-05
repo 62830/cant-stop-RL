@@ -19,6 +19,10 @@ XS = NAMES[1:]
 SEED0 = dict(P_H=10000, P_T=30000)  # P_S starts right after P_T's games
 GO, STOP = -1, -2
 
+def decision_key(s, a):
+    # GO / STOP, or a pick's resulting in-turn progress key (picks with the same progress are the same action)
+    return (GO if a.is_go() else STOP) if s.is_wait_for_go() else int(fr.key(tmp_of(*s.unsafe_pick(a))))
+
 def game_job(args):
     # one game played by srcs[player]; every value fn in srcs solves each turn start and acts on each real decision.
     # Returns turn starts (prog, p, raw [k], solved [k]) and decisions (turn, is_pick, choice keys [k], regret under S [k])
@@ -35,7 +39,7 @@ def game_job(args):
         legal = s.get_legal_actions()
         if len(legal) > 1:
             go = s.is_wait_for_go()
-            kf = (lambda a: GO if a.is_go() else STOP) if go else (lambda a: fr.key(tmp_of(*s.unsafe_pick(a))))
+            kf = lambda a: decision_key(s, a)
             acts = [a.act(s) for a in agents]
             ch = [kf(a) for a in acts]
             sol, (_, _, tmp) = agents[0].sol, fr.from_state(s)  # agents[0] is S

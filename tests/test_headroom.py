@@ -45,3 +45,14 @@ def test_cv_unbiased_and_tighter():
     q = np.array([np.r_[r.q(tmp, GO, j)] for j in range(300)])
     d = q[:, 0] - q[:, 1]
     assert abs(d.mean()) < 4 * d.std() / np.sqrt(300) and q[:, 1].std() < q[:, 0].std()
+
+def test_resume_guards(tmp_path):
+    import json, pytest
+    from headroom import check_fp, read_rows
+    p = str(tmp_path / 'r.jsonl')
+    check_fp(p, dict(R=64))
+    open(p, 'w').write(json.dumps(dict(id='a')) + '\n{"id": "b"')
+    assert [r['id'] for r in read_rows(p)] == ['a'] and open(p).read().count('\n') == 1
+    check_fp(p, dict(R=64))
+    with pytest.raises(SystemExit):
+        check_fp(p, dict(R=32))

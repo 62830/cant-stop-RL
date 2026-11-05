@@ -7,10 +7,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path[:0] = [ROOT, os.path.join(ROOT, 'analysis')]
 import fastrules as fr
 from game import State
-from solver_agent import SolverAgent, tmp_of
+from solver_agent import SolverAgent
 from turn_solver import solve_turn, best_move
 from td_train import BEST_VH, _vfn
-from warm_bias import ARCH, GO, STOP, boot_weights, cluster_sums, stat
+from warm_bias import ARCH, GO, STOP, decision_key, boot_weights, cluster_sums, stat
 
 # Rollout policy-improvement headroom of one-turn play. Games: SolverAgent(X) vs SolverAgent(H). At X's contested decisions
 # Q(s, a) = P(X wins) after a, X then playing for itself and H for the opponent (CRN: per-(rollout, turn) dice streams),
@@ -43,7 +43,7 @@ def game_job(args):
             s, _ = s.update(opp.act(s) if s.cur_agent_idx != px else legal[0])
             continue
         go = s.is_wait_for_go()
-        kf = (lambda a: GO if a.is_go() else STOP) if go else (lambda a: int(fr.key(tmp_of(*s.unsafe_pick(a)))))
+        kf = lambda a: decision_key(s, a)
         acts = {k: a.act(s) for k, a in agents.items()}
         prog, p, tmp = fr.from_state(s)
         sol = agents[X].sol
@@ -62,17 +62,21 @@ def game_job(args):
 # ---- rollouts
 class Roller:
     # Q rollouts for one decision; memo: (board, rollout, turn) -> values per K, so continuations shared across actions
-    # (CRN) are computed once; LRU of turn solutions
+    # (CRN) are computed once; the root turn is solved once, later turn starts go through an LRU (a few MB each; repeats
+    # are mostly the boards right after the root turn, e.g. after a bust)
+    LRU = 32
+
     def __init__(self, prog, p, Ks, seed, vx, vo, ev):
         self.prog, self.p, self.Ks, self.seed, self.vf, self.ev = np.array(prog, np.int8), p, Ks, seed, (vx, vo), ev
         self.tk = np.array([np.inf if k is None else 2 * k + 1 for k in Ks])
         self.memo, self.sols, self.n_turns = {}, OrderedDict(), 0
+        self.root = solve_turn(self.prog, p, vx)
 
     def sol(self, board, mover):
         key = (board.tobytes(), mover)
         if key not in self.sols:
             self.sols[key] = solve_turn(board, mover, self.vf[mover != self.p])
-            if len(self.sols) > 16:
+            if len(self.sols) > self.LRU:
                 self.sols.popitem(last=False)
         self.sols.move_to_end(key)
         return self.sols[key]
@@ -124,7 +128,7 @@ class Roller:
 
     def q(self, tmp, act, j):
         # -> (raw, control-variate corrected) values per K
-        b, eps = self.turn(self.sol(self.prog, self.p), self.prog, self.p, np.array(tmp, np.int8), act, self.rolls(j, 0))
+        b, eps = self.turn(self.root, self.prog, self.p, np.array(tmp, np.int8), act, self.rolls(j, 0))
         v, c = self.cont(b, j, 1)
         return v, v - c - eps
 
@@ -150,17 +154,31 @@ def regrets(Q, ci):
                 best=a, x_best=bool(m[ci] >= m[a] - 1e-12))
 
 # ---- stages
-def collect(pool, n_games):
-    path = os.path.join(OUT, 'decisions.json')
+def src_fp(srcs):
+    return {k: [os.path.abspath(v), os.path.getmtime(v), os.path.getsize(v)] if isinstance(v, str) else repr(v)
+            for k, v in srcs.items()}
+
+def check_fp(path, fp):
+    # sidecar path.fp.json; refuses to reuse a file made under another configuration
+    side = path + '.fp.json'
     if os.path.exists(path):
-        D = json.load(open(path))
-        if D['n_games'] == n_games:
-            return D
-    D = dict(n_games=n_games, seeds={X: SEED0 + b * n_games for b, X in enumerate(BASES)}, dec={})
+        if not os.path.exists(side) or json.load(open(side)) != fp:
+            raise SystemExit(f'{path} was made with a different configuration (see {side}); move it away to recompute')
+    else:
+        json.dump(fp, open(side, 'w'), indent=1)
+
+def collect(pool, n_games, srcs):
+    path = os.path.join(OUT, 'decisions.json')
+    fp = dict(n_games=n_games, seeds={X: SEED0 + b * n_games for b, X in enumerate(BASES)}, delta=DELTA, srcs=src_fp(srcs))
+    check_fp(path, fp)
+    if os.path.exists(path):
+        return json.load(open(path))
+    D = dict(n_games=n_games, seeds=fp['seeds'], dec={})
     for X in BASES:
         res = pool.map(game_job, [(X, g, D['seeds'][X] + g) for g in range(n_games)], chunksize=1)
         D['dec'][X] = [dict(d, id=f'{X}{i}') for i, d in enumerate(x for r in res for x in r)]
-    json.dump(D, open(path, 'w'))
+    json.dump(D, open(path + '.tmp', 'w'))
+    os.replace(path + '.tmp', path)
     return D
 
 def sample(D, X, n, contested, seed):
@@ -168,9 +186,24 @@ def sample(D, X, n, contested, seed):
     idx = np.random.default_rng(seed).choice(len(pool), min(n, len(pool)), replace=False)
     return [pool[i] for i in sorted(idx)]
 
-def run_rollouts(pool, jobs, path):
-    # appends one line per decision; resumes by skipping ids already in path
-    done = {json.loads(l)['id'] for l in open(path)} if os.path.exists(path) else set()
+def read_rows(path):
+    # complete jsonl rows; a torn last line (crash mid-write) is cut off the file
+    rows, ok = [], 0
+    with open(path, 'rb') as f:
+        for l in f:
+            try:
+                rows.append(json.loads(l))
+            except ValueError:
+                break
+            ok += len(l)
+    if ok < os.path.getsize(path):
+        os.truncate(path, ok)
+    return rows
+
+def run_rollouts(pool, jobs, path, fp):
+    # appends one line per decision; resumes (same fingerprint only) by skipping ids already in path
+    check_fp(path, fp)
+    done = {r['id'] for r in read_rows(path)} if os.path.exists(path) else set()
     todo = [j for j in jobs if j[0]['id'] not in done]
     t0 = time.time()
     with open(path, 'a') as f:
@@ -179,15 +212,22 @@ def run_rollouts(pool, jobs, path):
             f.flush()
             if i % 25 == 0:
                 print(f'{path}: {i + 1}/{len(todo)} {time.time() - t0:.0f}s', flush=True)
-    return {r['id']: r for r in map(json.loads, open(path))}
+    return {r['id']: r for r in read_rows(path)}
 
 def jobs_for(decs, X, Ks, R):
     return [(d, X, Ks, R, SEED0 * 1000 + int(d['id'][1:]) * 3 + BASES.index(X)) for d in decs]
 
+def se(x):
+    return float(np.std(x, ddof=1) / np.sqrt(len(x))) if len(x) > 1 else None
+
+def rollout_fp(D, Ks, R):
+    return dict(decisions=D['fp'], Ks=[str(k) for k in Ks], R=R, evaluator='mean(H, T, S)', control_variate=1)
+
 def pilot(pool, D, a):
     Ks, names = [2, 3, None], ['2', '3', 'full']
     sel = {X: sample(D, X, a.pilot_n, True, 1) + sample(D, X, a.pilot_unc, False, 2) for X in BASES}
-    res = run_rollouts(pool, [j for X in BASES for j in jobs_for(sel[X], X, Ks, a.pilot_R)], os.path.join(OUT, 'pilot.jsonl'))
+    res = run_rollouts(pool, [j for X in BASES for j in jobs_for(sel[X], X, Ks, a.pilot_R)], os.path.join(OUT, 'pilot.jsonl'),
+                       rollout_fp(D, Ks, a.pilot_R))
     out, sc = dict(Ks=names, R=a.pilot_R, bases={}), []
     for X in BASES:
         rows = dict(contested=[], uncontested=[])
@@ -201,17 +241,19 @@ def pilot(pool, D, a):
             sc.append(r['sec'] / (Q['cv'].shape[1] * Q['cv'].shape[2]))
         e = {}
         for kind, rs in rows.items():
+            if not rs:
+                continue
             qm = np.concatenate([x['qmean'] for x in rs])  # [actions, K]
-            dl = np.concatenate([x['delta'] for x in rs])  # Q(a) - Q(X's choice), a != choice [pairs, K]
+            dl = np.concatenate([x['delta'] for x in rs]).reshape(-1, len(names))  # Q(a) - Q(X's choice), a != choice [pairs, K]
             m = lambda f: float(np.mean([f(x) for x in rs]))
             e[kind] = dict(n=len(rs), rollout_sd={src: m(lambda x: x['q_sd'][src]) for src in ('cv', 'raw')}, **{
                 f'regret_{src}_{k}': dict(split=m(lambda x: x['reg'][src][k]['split']), naive=m(lambda x: x['reg'][src][k]['naive']),
                                           mc_se_mean=m(lambda x: x['reg'][src][k]['se']),
-                                          se_of_mean=float(np.std([x['reg'][src][k]['split'] for x in rs], ddof=1) / np.sqrt(len(rs))))
+                                          se_of_mean=se([x['reg'][src][k]['split'] for x in rs]))
                 for src in ('cv', 'raw') for k in names},
                 bias_q={k: dict(mean=float((qm[:, i] - qm[:, 2]).mean()), mean_abs=float(np.abs(qm[:, i] - qm[:, 2]).mean()),
-                                se=float((qm[:, i] - qm[:, 2]).std(ddof=1) / np.sqrt(len(qm)))) for i, k in enumerate(names[:2])},
-                bias_delta={k: dict(mean=float((dl[:, i] - dl[:, 2]).mean()), se=float((dl[:, i] - dl[:, 2]).std(ddof=1) / np.sqrt(len(dl))),
+                                se=se(qm[:, i] - qm[:, 2])) for i, k in enumerate(names[:2])},
+                bias_delta={k: dict(mean=float((dl[:, i] - dl[:, 2]).mean()), se=se(dl[:, i] - dl[:, 2]),
                                     n=len(dl)) for i, k in enumerate(names[:2])},
                 bias_regret={k: {est: m(lambda x: x['reg']['cv'][k][est] - x['reg']['cv']['full'][est]) for est in ('split', 'naive')}
                              for k in names[:2]},
@@ -220,7 +262,7 @@ def pilot(pool, D, a):
         out['bases'][X] = e
     out['worker_sec_per_rollout_full'] = float(np.mean(sc))
     json.dump(out, open(os.path.join(OUT, 'pilot.json'), 'w'), indent=1)
-    for X in BASES:
+    for X in (X for X in BASES if 'contested' in out['bases'][X]):
         c = out['bases'][X]['contested']
         print(X, 'c', round(out['bases'][X]['c'], 2), 'delta bias', c['bias_delta'], 'sd', c['rollout_sd'],
               {k: (round(c[f'regret_cv_{k}']['split'], 4), round(c[f'regret_cv_{k}']['naive'], 4), round(c[f'regret_cv_{k}']['mc_se_mean'], 4))
@@ -306,7 +348,8 @@ def main():
     srcs = dict(H=BEST_VH, T=a.T, S=a.S)
     with Pool(a.workers, initializer=init, initargs=(srcs,)) as pool:
         t0 = time.time()
-        D = collect(pool, a.games)
+        D = collect(pool, a.games, srcs)
+        D['fp'] = json.load(open(os.path.join(OUT, 'decisions.json.fp.json')))
         print({X: (len(D['dec'][X]), sum(d['close'] or d['disagree'] for d in D['dec'][X])) for X in BASES},
               f'collect {time.time() - t0:.0f}s', flush=True)
         if a.stage == 'pilot':
@@ -314,14 +357,18 @@ def main():
         elif a.stage == 'full':
             sel = {X: sample(D, X, a.n, True, 3) for X in BASES}
             path = os.path.join(OUT, f'full_K{a.K}_R{a.R}.jsonl')
-            res = run_rollouts(pool, [j for X in BASES for j in jobs_for(sel[X], X, [a.K, None], a.R)], path)
+            res = run_rollouts(pool, [j for X in BASES for j in jobs_for(sel[X], X, [a.K, None], a.R)], path, rollout_fp(D, [a.K, None], a.R))
             out = summarize(D, sel, res, a.K, 0, a.boot)
             out['full_length'] = summarize(D, sel, res, 'full', 1, a.boot)
             out.update(R=a.R, sources={k: os.path.relpath(v, ROOT) if isinstance(v, str) else repr(v) for k, v in srcs.items()},
                        summary_seconds=round(time.time() - t0), uncontested='regret 0 by assumption (checked in pilot.json)',
                        estimators='split: cross-fitted split-sample (biased low: a noisy a* is often worse than X); naive: same-sample '
                                   '(biased high, winner\'s curse); sig: cross-fitted, switch from X only when the selection half margin '
-                                  '> 2 SE (less biased middle); true headroom >= 0')
+                                  '> 2 SE (less biased middle); true headroom >= 0',
+                       readout_b='a game-level check is now cheap: eval.evaluate_paired(..., ref=BEST_VH) (PR #15) resolves a 0.5 pt '
+                                 'edge in ~2300 pairs (~20 min). Its measured S - V_h edge, 1.8 +- 0.5 pts, lies inside H\'s '
+                                 '[split, naive] bracket but above the gated 0.70, so the gated estimate likely understates H\'s '
+                                 'headroom (it only switches on > 2 SE margins and drops the many small real gains)')
             json.dump(out, open(os.path.join(OUT, 'results.json'), 'w'), indent=1)
             for X in BASES:
                 e = out['bases'][X]

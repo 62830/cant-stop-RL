@@ -1,0 +1,22 @@
+{
+ "n_games": 100,
+ "seeds": {
+  "H": 40000,
+  "T": 40100,
+  "S": 40200
+ },
+ "delta": 0.03,
+ "srcs": {
+  "H": "VH('claim_top3', theta=[0.6431, 0.6591], bias=0.2690)",
+  "T": [
+   "/home/identity_element/Documents/code_playground/python/cant_stop_archive/cant_stop_td30/runs/td30/ckpt/it0082.pt",
+   1793179699.5023427,
+   121837
+  ],
+  "S": [
+   "/home/identity_element/Documents/code_playground/python/cant_stop_archive/cant_stop_scratch/runs/scratch30/ckpt/it0297.pt",
+   1793193553.4330218,
+   121837
+  ]
+ }
+}

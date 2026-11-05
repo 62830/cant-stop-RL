@@ -126,7 +126,7 @@ def h_vs_s(R):
             sc = 1 if ax is axs[0] else 100
             e, ci = sc * s['est'], sc * np.array(s['ci'])
             ax.errorbar(i, e, yerr=[[e - ci[0]], [ci[1] - e]], fmt='o', color=SERIES[X], ms=8, lw=2, zorder=3)
-            ax.text(i + 0.06, e, f'{e:.2f}' if sc == 1 else f'{e:.2f}', fontsize=8, color=INK, va='center')
+            ax.text(i + 0.06, e, f'{e:.2f}', fontsize=8, color=INK, va='center')
         ax.set_xticks(range(2), ["H's choice", "S's choice"], color=INK, fontsize=9)
         ax.set_xlim(-0.5, 1.6)
         ax.set_ylabel(lab, color=MUTED, fontsize=8)

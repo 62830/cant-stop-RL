@@ -2917,7 +2917,8 @@
   "T": "../cant_stop_archive/cant_stop_td30/runs/td30/ckpt/it0082.pt",
   "S": "../cant_stop_archive/cant_stop_scratch/runs/scratch30/ckpt/it0297.pt"
  },
- "seconds": 3,
+ "summary_seconds": 2,
  "uncontested": "regret 0 by assumption (checked in pilot.json)",
- "estimators": "split: cross-fitted split-sample (biased low: a noisy a* is often worse than X); naive: same-sample (biased high, winner's curse); sig: cross-fitted, switch from X only when the selection half margin > 2 SE (less biased middle); true headroom >= 0"
+ "estimators": "split: cross-fitted split-sample (biased low: a noisy a* is often worse than X); naive: same-sample (biased high, winner's curse); sig: cross-fitted, switch from X only when the selection half margin > 2 SE (less biased middle); true headroom >= 0",
+ "readout_b": "a game-level check is now cheap: eval.evaluate_paired(..., ref=BEST_VH) (PR #15) resolves a 0.5 pt edge in ~2300 pairs (~20 min). Its measured S - V_h edge, 1.8 +- 0.5 pts, lies inside H's [split, naive] bracket but above the gated 0.70, so the gated estimate likely understates H's headroom (it only switches on > 2 SE margins and drops the many small real gains)"
 }
