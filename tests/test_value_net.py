@@ -72,3 +72,40 @@ def test_tiny_training_no_warm(tmp_path):
     assert next(r for r in recs if r['kind'] == 'warm')['init'] == 'random'
     assert [r['iter'] for r in recs if r['kind'] == 'iter'] == [1]
     assert (d / 'ckpt' / 'it0000.pt').exists() and (d / 'ckpt' / 'it0001.pt').exists()
+
+def test_ensemble_mean_logit():
+    from value_net import Ensemble
+    from turn_solver import _stop_boards
+    torch.manual_seed(0)
+    nets = [NetV(make_net((128, 64))) for _ in range(3)]
+    e = pickle.loads(pickle.dumps(Ensemble([n.fused() for n in nets])))
+    progs = boards(50, 2)
+    sig = lambda z: 1 / (1 + np.exp(-z))
+    for m in (0, 1):
+        ref = sig(np.mean([n.logits(progs, m).double().numpy() for n in nets], 0))
+        np.testing.assert_allclose(e(progs, m), ref, atol=1e-6)
+    for prog in progs[:10]:
+        p = 0
+        keys, _, _ = fr.enumerate_turn(prog, p)
+        bs, win = _stop_boards(prog, p, keys)
+        ask = ~win & (keys != 0)
+        q = np.concatenate([bs[ask], prog[None]])
+        ref = sig(np.mean([n.logits(q, 1 - p).double().numpy() for n in nets], 0))
+        np.testing.assert_allclose(e.banked(prog, p, keys[ask]), ref, atol=1e-5)
+
+def test_stop_eps_warmup(tmp_path, monkeypatch):
+    import importlib.util, td_train
+    from game import State
+    old = tmp_path / 'td_train_head.py'
+    old.write_text(subprocess.run(['git', 'show', 'HEAD:td_train.py'], cwd=ROOT, capture_output=True, text=True).stdout)
+    spec = importlib.util.spec_from_file_location('td_train_head', old)
+    head = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(head)
+    same = lambda x, y: all(np.array_equal(a[0], b[0]) and a[1:] == b[1:] for a, b in zip(x, y)) and len(x) == len(y)
+    for seed in (1, 2):
+        assert same(td_train.play((td_train.BEST_VH, seed, None, 0.0))[0], head.play((td_train.BEST_VH, seed))[0])
+    acts, update = [], State.update
+    monkeypatch.setattr(State, 'update', lambda s, a: (acts.append((s.wait_for_go, a.value)), update(s, a))[1])
+    td_train.play((td_train.BEST_VH, 3, None, 1.0))
+    gs = [v for w, v in acts if w]
+    assert gs and all(v == 2 for v in gs)  # every go/stop decision stops

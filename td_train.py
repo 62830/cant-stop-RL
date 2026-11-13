@@ -4,7 +4,7 @@ from collections import deque
 from multiprocessing import Pool
 import numpy as np
 import fastrules as fr
-from game import State
+from game import State, Action
 from heuristics import VH
 from solver_agent import SolverAgent
 from turn_solver import solve_turn, _stop_boards
@@ -62,6 +62,8 @@ def play(args, hook=None):
     # start, extra solve time
     src, seed = args[:2]
     br = args[2] if len(args) > 2 else None
+    eps = args[3] if len(args) > 3 else 0  # forced-stop warmup: stop instead of a chosen go w.p. eps (targets stay greedy)
+    erng = np.random.default_rng(seed) if eps else None
     v = _vfn(src)
     random.seed(seed)
     agent, s, rec, t, solves, cands, gaps = SolverAgent(v), State(), [], 0.0, 0, [], []
@@ -84,7 +86,10 @@ def play(args, hook=None):
             rec.append((prog, p, sol.value(ZERO), float(v(prog[None], p)[0])))
             if hook:
                 hook(sol)
-        s, _ = s.update(agent.act(s))
+        act = agent.act(s)
+        if eps and s.wait_for_go and act.is_go() and erng.random() < eps:
+            act = Action('stop')
+        s, _ = s.update(act)
     w = s.get_winner()
     extra, te, taken = [], 0.0, {(r[0].tobytes(), r[1]) for r in rec}
     for p, srcs in cands:
@@ -152,6 +157,11 @@ def main():
     ap.add_argument('--replay', type=float, default=8)
     ap.add_argument('--batch', type=int, default=256)
     ap.add_argument('--lr', type=float, default=1e-3)
+    ap.add_argument('--lr_drop_frac', type=float, default=None, help='at this fraction of --minutes set lr to --lr_low in place (Adam state and buffer kept)')
+    ap.add_argument('--lr_low', type=float, default=1e-4)
+    ap.add_argument('--stop_eps', type=float, default=0, help='forced-stop warmup: P(stop | solver goes), linear to 0 at --stop_eps_iters')
+    ap.add_argument('--stop_eps_iters', type=int, default=15)
+    ap.add_argument('--threads', type=int, default=4, help='learner torch threads')
     ap.add_argument('--warm_games', type=int, default=96)
     ap.add_argument('--n_resid', type=int, default=200)
     ap.add_argument('--resid_every', type=int, default=2)
@@ -190,7 +200,7 @@ def main():
     import torch
     from value_net import NetV, make_net, features
     torch.manual_seed(a.seed)
-    torch.set_num_threads(4)
+    torch.set_num_threads(a.threads)
     X = lambda progs, ms: features(pov(progs, ms), 0)
     log(mf, kind='config', **vars(a), t=time.time())
     t0 = time.time()
@@ -204,8 +214,8 @@ def main():
 
     if a.resume:
         it = int(prior[-1][2:6])
-        net = NetV.load(ckpt(ckdir, it), threads=4).net
-        warm = NetV.load(ckpt(ckdir, 0), threads=4)
+        net = NetV.load(ckpt(ckdir, it), threads=a.threads).net
+        warm = NetV.load(ckpt(ckdir, 0), threads=a.threads)
         last_t = max((json.loads(l).get('t', 0) for l in open(mf) if '"kind": "iter"' in l), default=0)
         log(mf, kind='resume', iter=it, t=last_t, note='fresh buffer and optimizer')
     else:
@@ -233,18 +243,27 @@ def main():
 
     opt = torch.optim.Adam(net.parameters(), lr=a.lr)
     buf = deque(maxlen=a.buffer)
-    calib = []
+    calib, eps_ended = [], False
     t_start = time.time() - last_t
     t_end = time.time() + a.minutes * 60
+    t_drop = time.time() + a.lr_drop_frac * a.minutes * 60 if a.lr_drop_frac is not None else None
     chunks = np.array_split(np.arange(len(H_p)), 2 * a.workers)
     for _ in range(a.iters):
         if time.time() >= t_end:
             break
+        if t_drop and time.time() >= t_drop and opt.param_groups[0]['lr'] != a.lr_low:
+            for g in opt.param_groups:
+                g['lr'] = a.lr_low
+            log(mf, kind='lr_drop', iter=it, lr=a.lr_low, t=round(time.time() - t_start, 1))
         t0 = time.time()
         src = ckpt(ckdir, it)  # the snapshot (target net) workers play and bootstrap with
         do_resid = it % a.resid_every == 0
         br = (a.branch_end, a.branch_close, a.close_delta, a.rho_min, spath)
-        pjobs = pool.map_async(play, [(src, (a.seed + 1) * 10 ** 7 + it * 1000 + i, br) for i in range(a.games)], chunksize=1)
+        eps = a.stop_eps * max(0.0, 1 - it / a.stop_eps_iters)
+        if a.stop_eps and not eps and not eps_ended:
+            eps_ended = log(mf, kind='stop_eps_end', iter=it)
+        pjobs = pool.map_async(play, [(src, (a.seed + 1) * 10 ** 7 + it * 1000 + i, br) + ((eps,) if eps else ())
+                                      for i in range(a.games)], chunksize=1)
         # residual jobs queue behind self-play, so its wall time excludes them
         rjobs = pool.map_async(residual_job, [(src, H_progs[c], H_p[c]) for c in chunks] if do_resid else [])
         full = bool(sets) and it % a.resid_full_every == 0
@@ -284,7 +303,7 @@ def main():
                                  extra_dups=sum(len(g[3]) for g in res) - len(extra),
                                  close_per_turn=float(np.mean([len(g) for g in gaps])) if gaps else None,
                                  close_gap=float(np.mean([x for g in gaps for x in g])) if any(gaps) else None,
-                                 buffer=len(buf), pairs=len(recs), pairs_src=npairs, steps=steps, iter_s=round(time.time() - t0, 1)))]
+                                 stop_eps=eps, buffer=len(buf), pairs=len(recs), pairs_src=npairs, steps=steps, iter_s=round(time.time() - t0, 1)))]
         if it % a.calib_every == 0:
             cp, cm, cv, co = (np.array([r[i] for r in calib]) for i in (0, 1, 3, 4))
             (nb, ne), (wbins, we) = bins(cv, co), bins(warm(pov(cp, cm), 0), co)
