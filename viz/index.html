@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>td30 explorer</title>
+<title>explorer</title>
 <style>
 :root { --bg:#f7f7f5; --card:#fff; --fg:#1d1d1f; --mute:#6b6b70; --line:#dcdcd8; --cell:#ececE8;
   --p0:#2f6fd6; --p1:#e0702e; --bad:#d23c3c; --good:#2e9e5b; --mark:#fff; --go:#1f9e89; --stop:#b8478f; }
@@ -42,14 +42,14 @@ tr.best td { font-weight:600 } tr.pick:hover { background:var(--cell); cursor:po
 </style>
 </head>
 <body>
-<header><b>td30 explorer</b>
+<header><b id="appName">explorer</b>
   <button class="tab on" data-t="edit">Edit</button><button class="tab" data-t="play">Play</button><button class="tab" data-t="hist">History</button><button class="tab" data-t="bnd">Boundary</button>
   <small class="mute" id="model" style="margin-left:auto"></small>
 </header>
 
 <main>
   <div class="card wide hide" id="chartCard"><div class="row"><b>P(P0 wins) per decision</b>
-    <span class="mute">● matched td30 &nbsp; <span style="color:var(--bad)">●</span> deviation (size = cost) &nbsp; ✕ bust &nbsp; ┆ turn</span>
+    <span class="mute">● matched <span class="mname">model</span> &nbsp; <span style="color:var(--bad)">●</span> deviation (size = cost) &nbsp; ✕ bust &nbsp; ┆ turn</span>
     <span style="flex:1"></span><button id="hPrev">←</button><button id="hNext">→</button>
     <button id="hEdit">Open in Edit</button><button id="hExp">Export</button><label><button id="hImpB">Import</button></label>
     <input type="file" id="hImp" accept=".json" class="hide"></div><div id="chart"></div></div>
@@ -68,7 +68,7 @@ tr.best td { font-weight:600 } tr.pick:hover { background:var(--cell); cursor:po
     </div>
     <div id="playCtl" class="card hide">
       <div class="row"><select id="mode"><option value="0">You are P0</option><option value="1">You are P1</option>
-        <option value="w">Watch td30 vs td30</option></select><button id="newGame">New game</button>
+        <option value="w">Watch model self-play</option></select><button id="newGame">New game</button>
         <label><input type="checkbox" id="hints" checked> show eval</label></div>
       <div class="row"><button id="pause">Pause</button><button id="stepBtn">Step</button>
         <label class="mute">delay <input type="range" id="speed" min="0" max="2000" value="700" style="width:110px"></label></div>
@@ -104,7 +104,8 @@ async function post(url, body) {
   if (!r.ok) throw new Error(j.error);
   return j;
 }
-const head = e => e.v_roll ?? e.v_solved, headP0 = e => e.v_roll_p0 ?? e.v_solved_p0;
+const headP0 = e => e.v_roll_p0 ?? e.v_solved_p0;
+let INFO = null, MODEL = 'model';  // from /info
 
 // ---------- board ----------
 const CS = 26, GX = 34, TOP = 8, W = 11 * GX + 8, H = TOP + 13 * CS + 30;
@@ -151,7 +152,7 @@ function evalHTML(e, s, snap, taken) {
     const g = e.go ?? -1, st = e.stop ?? -1;
     o += `<table class="num" style="margin-top:8px"><tr><th>${s.wait_for_go ? 'decision' : 'if the turn ended here'}</th><th></th><th>P(${P})</th></tr>
       ${r('stop', e.stop, st >= g)}${r('go', e.go, g > st)}</table>
-      <div class="mute">P(bust on next roll) ${pct(e.pbust)} · value after bust ${pct(e.bust_val)}${e.decision ? ` · td30: <b>${e.decision}</b>` : ''}</div>`;
+      <div class="mute">P(bust on next roll) ${pct(e.pbust)} · value after bust ${pct(e.bust_val)}${e.decision ? ` · ${MODEL}: <b>${e.decision}</b>` : ''}</div>`;
   }
   if (e.picks) {
     if (e.bust) o += `<div class="err" style="margin-top:8px">bust — no legal pick (${P} falls to ${pct(e.bust_val)})</div>`;
@@ -212,7 +213,7 @@ $('#panel').onclick = ev => {  // Edit: clicking a pick applies it
   const r = ev.target.closest('tr[data-m]');
   const k = r && tab == 'edit' && !E.stale && E.ev && E.ev.picks && E.ev.picks.find(k => k.move + '' == r.dataset.m);
   if (!k) return;
-  E.s.tmp = k.tmp; E.s.wait_for_go = true; setDice(null); changed();
+  E.s.tmp = [...k.tmp]; E.s.wait_for_go = true; setDice(null); changed();
 };
 function changed() {
   clearTimeout(E.timer);
@@ -220,7 +221,7 @@ function changed() {
   const seq = ++E.seq, s = clone(E.s);
   E.timer = setTimeout(async () => {
     let ev = null, err = '';
-    try { await post('/validate', s); ev = await post('/eval', s); } catch (x) { err = x.message; }
+    try { ev = await post('/eval', s); } catch (x) { err = x.message; }
     if (seq != E.seq) return;  // a newer edit owns the panel
     E.ev = ev; E.err = err; E.stale = false; renderEdit();
   }, 200);
@@ -250,10 +251,11 @@ function nextRoll() {
   return d;
 }
 async function newGame() {
-  clearTimeout(G.timer); G.tok++;
-  G.mode = $('#mode').value; G.hist = []; G.log = []; sel = 0;
-  G.s = (await post('/step', {state: blank(), action: null, dice: nextRoll()})).state;
-  await advance();
+  clearTimeout(G.timer); const tok = ++G.tok;
+  G.mode = $('#mode').value; G.paused = false; G.hist = []; G.log = []; sel = 0; G.s = G.ev = null;
+  const s = (await post('/step', {state: blank(), action: null, next_dice: nextRoll()})).state;
+  if (tok != G.tok) return;  // a newer New game (or import) owns the board
+  G.s = s; await advance();
 }
 async function advance() {
   const tok = G.tok;
@@ -262,9 +264,9 @@ async function advance() {
   renderPlay();
   if (G.s.winner == null && bot() && !G.paused) G.timer = setTimeout(botMove, delay());
 }
-const td30 = e => e.decision ?? (e.bust ? 'null' : {pick: e.picks[0].move});  // = /act, from the eval in hand
+const botAct = e => e.decision ?? (e.bust ? 'null' : {pick: e.picks[0].move});  // = /act, from the eval in hand
 function botMove() {
-  if (!G.busy && G.ev && G.s.winner == null && bot()) act(td30(G.ev), 'td30');
+  if (!G.busy && G.ev && G.s.winner == null && bot()) act(botAct(G.ev), MODEL);
 }
 async function act(a, actor) {
   if (G.busy || !G.ev) return;
@@ -272,7 +274,7 @@ async function act(a, actor) {
   const tok = G.tok;
   try {
     const roll = a == 'go' || a == 'stop' ? nextRoll() : null;
-    const r = await post('/step', {state: G.s, action: a, dice: roll});
+    const r = await post('/step', {state: G.s, action: a, next_dice: roll});
     if (tok != G.tok) return;
     G.hist.push({state: G.s, actor, action: a, eval: G.ev, events: r.events});
     for (const e of r.events) G.log.unshift(e.type == 'bust' ? `P${e.p} busts on ${e.dice.join(' ')}` : e.type == 'win' ? `P${e.p} wins` : `P${e.p} banks`);
@@ -297,7 +299,7 @@ function renderPlay() {
   const s = G.s, e = G.ev, hint = $('#hints').checked, you = !bot();
   drawBoard(s, false);
   $('#status').innerHTML = s.winner != null ? `<span style="color:${pc(s.winner)}">P${s.winner} wins</span>`
-    : `<span style="color:${pc(s.p)}">P${s.p}</span> ${you ? '— your move' : '— td30' + (G.paused ? ' (paused)' : '')}`;
+    : `<span style="color:${pc(s.p)}">P${s.p}</span> ${you ? '— your move' : '— ' + MODEL + (G.paused ? ' (paused)' : '')}`;
   $('#pDice').innerHTML = (s.dice || []).map(d => `<span>${d}</span>`).join('');
   let a = '';
   if (s.winner == null && e) {
@@ -350,7 +352,7 @@ function renderHist() {
   drawBoard(x.state, false);
   const act = typeof x.action == 'string' ? x.action : 'pick ' + mvs(x.action.pick);
   $('#panel').innerHTML = `<div class="row"><b>#${sel}</b> <span style="color:${pc(x.state.p)}">P${x.state.p}</span> (${x.actor}) chose <b>${act}</b>
-    ${c > 1e-9 ? `<span class="err">− ${(100 * c).toFixed(1)} pts vs td30</span>` : '<span style="color:var(--good)">= td30</span>'}</div>
+    ${c > 1e-9 ? `<span class="err">− ${(100 * c).toFixed(1)} pts vs ${MODEL}</span>` : `<span style="color:var(--good)">= ${MODEL}</span>`}</div>
     ${x.state.dice ? `<div class="row dice">${x.state.dice.map(d => `<span>${d}</span>`).join('')}</div>` : ''}
     ${(x.events || []).map(e => `<div class="mute">→ ${e.type} P${e.p}${e.dice ? ' on ' + e.dice.join(' ') : ''}</div>`).join('')}` + evalHTML(x.eval, x.state, null, x.action);
 }
@@ -364,8 +366,8 @@ document.onkeydown = ev => {
 };
 $('#hExp').onclick = () => {
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify({hist: G.hist, state: G.s}, null, 1)], {type: 'application/json'}));
-  a.download = `td30-game-${Date.now()}.json`; a.click();
+  a.href = URL.createObjectURL(new Blob([JSON.stringify({info: INFO, hist: G.hist, state: G.s}, null, 1)], {type: 'application/json'}));
+  a.download = `${MODEL.replace(/\W+/g, '-')}-game-${Date.now()}.json`; a.click();
 };
 // imported files are untrusted: rebuild every entry from typed fields (numbers / known strings) or drop it
 const N = x => x == null ? null : +x, nums = (a, n) => a.slice(0, n).map(Number), tryc = f => { try { return f(); } catch (x) { return null; } };
@@ -385,7 +387,7 @@ const cleanEntry = h => tryc(() => {
   if (a == null) throw 0;
   const ev = (h.events || []).map(e => ({type: one(e.type, ['bust', 'banked', 'win']), p: +e.p, ...(e.dice ? {dice: nums(e.dice, 4)} : {})}));
   if (ev.some(e => !e.type)) throw 0;
-  return {state: cleanState(h.state), actor: h.actor == 'you' ? 'you' : 'td30', action: a, eval: cleanEval(h.eval), events: ev};
+  return {state: cleanState(h.state), actor: String(h.actor).replace(/[^\w×./-]/g, '').slice(0, 40) || 'bot', action: a, eval: cleanEval(h.eval), events: ev};
 });
 $('#hImpB').onclick = () => $('#hImp').click();
 $('#hImp').onchange = async () => {
@@ -417,8 +419,16 @@ function openBnd() {
   }
   fetchBnd();
 }
+function permBnd(d, cols) {  // the same solve with its axes in cols order
+  const pa = cols.map(c => d.cols.indexOf(c)), n = pa.map(a => d.hi[a] - d.lo[a] + 1), A = n => [...Array(n).keys()];
+  const g = a => A(n[0]).map(i => A(n[1]).map(j => A(n[2]).map(k => {
+    const x = []; [i, j, k].forEach((v, b) => x[pa[b]] = v); return a[x[0]][x[1]][x[2]];
+  })));
+  return {...d, cols: [...cols], lo: pa.map(a => d.lo[a]), hi: pa.map(a => d.hi[a]), stop: g(d.stop), go: g(d.go), pbust: g(d.pbust), win: g(d.win)};
+}
 async function fetchBnd() {
-  const s = E.s, key = JSON.stringify([s.prog, s.p, B.cols]);
+  const s = E.s, key = JSON.stringify([s.prog, s.p, [...B.cols].sort((a, b) => a - b)]);  // column order: no re-solve
+  if (key == B.key && B.d && B.d.cols + '' != B.cols + '') { B.d = permBnd(B.d, B.cols); B.hov = null; }
   if (key != B.key) {
     B.key = key; B.d = B.hov = null; B.err = '';
     const seq = ++B.seq;
@@ -426,7 +436,7 @@ async function fetchBnd() {
     let d = null, err = '';
     try { d = await post('/boundary', {state: {...blank(), prog: s.prog, p: s.p}, cols: B.cols}); } catch (x) { err = x.message; }
     if (seq != B.seq) return;
-    B.d = d; B.err = err; B.hov = null;
+    B.d = d && permBnd(d, B.cols); B.err = err; B.hov = null;
     if (!d) B.key = '';  // retry on the next fetch
   }
   renderBnd();
@@ -504,8 +514,13 @@ $('#maps').onclick = ev => {
 
 fetch('/info').then(r => r.json()).then(i => {
   const f = i.ckpts.map(c => c.split('/').slice(-3).join('/'));
+  INFO = i; MODEL = i.n == 1 ? i.ckpts[0].split('/').pop().replace(/\.pt$/, '') : `ensemble×${i.n}`;
   $('#model').textContent = i.n == 1 ? f[0] : `ensemble of ${i.n}: ${f.join(', ')}`;
   $('#model').title = i.ckpts.join('\n');
+  document.title = $('#appName').textContent = `${MODEL} explorer`;
+  $$('.mname').forEach(x => x.textContent = MODEL);
+  $('#mode option[value=w]').textContent = `Watch ${MODEL} vs ${MODEL}`;
+  renderPlay();
 });
 changed();
 </script>

@@ -212,7 +212,7 @@ def act():
 @api
 def step_():
     b = request.get_json(force=True)
-    s, events = step(*live(body_state()), b.get('action'), check_dice(b.get('dice')))
+    s, events = step(*live(body_state()), b.get('action'), check_dice(b.get('next_dice')))
     return dict(state=s, events=events)
 
 def boundary(prog, p, cols):

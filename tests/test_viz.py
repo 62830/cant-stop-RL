@@ -109,16 +109,19 @@ def test_bust(c):
     assert ok(c.post('/act', json=st))['action'] == 'null'
     r = ok(c.post('/step', json=dict(state=st, action='null')))
     assert r['events'][0]['type'] == 'bust' and r['state']['p'] == 1
+    random.seed(0)  # flat body: the state's dice are the bust roll, never P1's next roll
+    r = ok(c.post('/step', json=dict(st, action='null')))
+    assert r['events'][0]['dice'] == [6, 6, 6, 6] and r['state']['p'] == 1 and r['state']['dice'] != [6, 6, 6, 6]
 
 def test_bad_requests(c):
     st = S.state(np.zeros((2, 13), np.int8), 0, dice=[1, 2, 3, 4])
     for b in ([1, 2], 'x', None):
         assert c.post('/eval', json=b).status_code == 400
     for d in ([7, 1, 1, 1], [1, 1, 1], ['1', 1, 1, 1], [True, 1, 1, 1], []):
-        assert c.post('/step', json=dict(state=dict(st, dice=None), action=None, dice=d)).status_code == 400
+        assert c.post('/step', json=dict(state=dict(st, dice=None), action=None, next_dice=d)).status_code == 400
     for a in (None, 'go', {'pick': 5}, {'pick': ['4', 6]}):
         assert c.post('/step', json=dict(state=st, action=a)).status_code == 400
-    r = ok(c.post('/step', json=dict(state=dict(st, dice=None), action=None, dice=[6, 6, 6, 6])))
+    r = ok(c.post('/step', json=dict(state=dict(st, dice=None), action=None, next_dice=[6, 6, 6, 6])))
     assert r['state']['dice'] == [6, 6, 6, 6]
 
 def test_won_stop(c):
