@@ -5,17 +5,20 @@ from flask import Flask, request, jsonify, send_file, abort
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import fastrules as fr
 from fastrules import LEN
-from value_net import NetV
+from value_net import NetV, Ensemble
 from solver_agent import SolverAgent
 
 # stateless JSON API; a state is {prog: [[13], [13]], p, tmp: [13], dice: [4] | null, wait_for_go, winner?}
 # probabilities are P(p wins) for the mover p, and *_p0 = P(player 0 wins)
 app = Flask(__name__)
-agent, lock = None, threading.Lock()
+agent, info, lock = None, None, threading.Lock()
 
-def init(ckpt):
-    global agent
-    agent = SolverAgent(NetV.load(ckpt).fused())
+def init(ckpts):
+    # one checkpoint path, or several for an Ensemble (sigmoid of the members' mean logit)
+    global agent, info
+    ckpts = [ckpts] if isinstance(ckpts, str) else list(ckpts)
+    agent = SolverAgent(NetV.load(ckpts[0]).fused() if len(ckpts) == 1 else Ensemble(ckpts))
+    info = dict(model='single' if len(ckpts) == 1 else 'ensemble', n=len(ckpts), ckpts=ckpts)
     t = time.time()
     agent.solution(np.zeros((2, 13), np.int8), 0, np.zeros(13, np.int8))  # warm numba + the solver
     print(f'warm-up solve {time.time() - t:.1f}s')
@@ -253,13 +256,17 @@ def body_state():
         raise Bad('body must be an object')
     return b.get('state', b)
 
+@app.get('/info')
+def info_():
+    return jsonify(info)
+
 @app.get('/')
 def index():
     return send_file(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'index.html'))
 
 if __name__ == '__main__':
     ap = argparse.ArgumentParser()
-    ap.add_argument('--ckpt', default='runs/td30/it0082.pt')
+    ap.add_argument('--ckpt', nargs='+', default=['runs/td30/it0082.pt'], help='one net, or several for an ensemble')
     ap.add_argument('--port', type=int, default=5000)
     a = ap.parse_args()
     init(a.ckpt)

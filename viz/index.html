@@ -44,6 +44,7 @@ tr.best td { font-weight:600 } tr.pick:hover { background:var(--cell); cursor:po
 <body>
 <header><b>td30 explorer</b>
   <button class="tab on" data-t="edit">Edit</button><button class="tab" data-t="play">Play</button><button class="tab" data-t="hist">History</button><button class="tab" data-t="bnd">Boundary</button>
+  <small class="mute" id="model" style="margin-left:auto"></small>
 </header>
 
 <main>
@@ -501,6 +502,11 @@ $('#maps').onclick = ev => {
   openInEdit({...E.s, tmp: t, wait_for_go: true, dice: null});
 };
 
+fetch('/info').then(r => r.json()).then(i => {
+  const f = i.ckpts.map(c => c.split('/').slice(-3).join('/'));
+  $('#model').textContent = i.n == 1 ? f[0] : `ensemble of ${i.n}: ${f.join(', ')}`;
+  $('#model').title = i.ckpts.join('\n');
+});
 changed();
 </script>
 </body>

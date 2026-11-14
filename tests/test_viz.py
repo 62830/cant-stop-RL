@@ -157,3 +157,32 @@ def test_boundary(c):
         assert c.post('/boundary', json=dict(state=st, cols=cs)).status_code == 400
     prog[1, 2] = 3  # P1 has won
     assert c.post('/boundary', json=dict(state=S.state(prog, 1, winner=1), cols=[5, 6, 7])).status_code == 400
+
+def _vnet(c, boards):
+    return np.array([ok(c.post('/eval', json=S.state(b, p)))['v_net'] for b, p in boards])
+
+def _boards():
+    return [(np.zeros((2, 13), np.int8), 0)] + [fr.from_state(s)[:2] for s in _states(4, seed=3)]
+
+def test_single_ckpt(c):
+    from value_net import FusedNet, NetV
+    assert S.info == dict(model='single', n=1, ckpts=[os.path.join(ROOT, 'runs/td30/it0082.pt')])
+    assert isinstance(S.agent.value_fn, FusedNet) and c.get('/info').json == S.info
+    ref = NetV.load(S.info['ckpts'][0])
+    assert np.allclose(_vnet(c, _boards()), [ref(b[None], p)[0] for b, p in _boards()], atol=1e-6)
+
+def test_ensemble_ckpts(c):
+    from value_net import Ensemble, NetV
+    ens = [os.path.join(ROOT, f) for f in ('runs/td30/it0082.pt', 'runs/scratch30/it0297.pt', 'runs/wide60/it0100.pt')]
+    old = S.agent, S.info
+    try:
+        S.init(ens)
+        assert c.get('/info').json == dict(model='ensemble', n=3, ckpts=ens)
+        got, e, nets = _vnet(c, _boards()), Ensemble(ens), [NetV.load(f) for f in ens]
+        assert (got == [e(b[None], p)[0] for b, p in _boards()]).all()
+        z = [np.mean([n.logits(b[None], p).double().numpy() for n in nets]) for b, p in _boards()]
+        assert np.allclose(got, 1 / (1 + np.exp(-np.array(z))), atol=1e-6, rtol=0)
+        s = _states(1, seed=4)[0]
+        assert ok(c.post('/act', json=js(s)))['action']
+    finally:
+        S.agent, S.info = old
