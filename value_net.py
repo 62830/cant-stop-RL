@@ -98,9 +98,14 @@ class Ensemble:
     # value_fn: sigmoid of the members' mean logit (members: FusedNets or checkpoint paths); banked via each member's kernel
     def __init__(self, members):
         self.m = [NetV.load(x).fused() if isinstance(x, str) else x for x in members]
+        bad = [type(x).__name__ for x in self.m if not isinstance(x, FusedNet)]
+        if bad:
+            raise TypeError(f'Ensemble members must be FusedNets (NetV with 2 hidden layers); got {bad}')
 
+    @torch.inference_mode()
     def __call__(self, progs, m):
-        return torch.sigmoid(torch.stack([x.v.logits(progs, m) for x in self.m]).mean(0)).double().numpy()
+        x = torch.from_numpy(features(progs, m)).float()
+        return torch.sigmoid(torch.stack([f.v.net(x)[:, 0] for f in self.m]).mean(0)).double().numpy()
 
     def banked(self, prog, p, keys):
         return 1 / (1 + np.exp(-np.mean([x.banked(prog, p, keys, True) for x in self.m], 0)))

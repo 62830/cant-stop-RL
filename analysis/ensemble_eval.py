@@ -53,9 +53,13 @@ def save(res):
 def se(ci):
     return (ci[1] - ci[0]) / (2 * 1.96)
 
-def gate(name, n, workers):
+def gate(name, n, workers, force=False):
     A, B, n0, seed = GATES[name]
     n = n or n0
+    if not n:
+        raise SystemExit(f'gate {name}: pass --n (sized from the pilot: step size)')
+    if name in load().get('gates', {}) and not force:
+        raise SystemExit(f'gate {name} already in {RES}; pass --force to overwrite it')
     v = value_fns()
     t = time.time()
     d = evaluate_paired_detail(partial(SolverAgent, v[A]), partial(SolverAgent, v[B]), n, workers, seed, ref=BEST_VH)
@@ -125,6 +129,7 @@ def main():
     ap.add_argument('name', nargs='?')
     ap.add_argument('--n', type=int)
     ap.add_argument('--workers', type=int, default=8)
+    ap.add_argument('--force', action='store_true', help='gate: overwrite an existing result')
     ap.add_argument('--minutes', type=float, default=30, help='size: time left for the E3 vs S main gate')
     a = ap.parse_args()
     if a.step == 'rule':
@@ -136,7 +141,7 @@ def main():
     elif a.step == 'dist':
         dist()
     elif a.step == 'gate':
-        gate(a.name, a.n, a.workers)
+        gate(a.name, a.n, a.workers, a.force)
     elif a.step == 'size':
         # main E3 vs S pairs that fit in --minutes at the pilot's pace, and the edge they resolve
         g = load()['gates']['E3_vs_S_pilot']

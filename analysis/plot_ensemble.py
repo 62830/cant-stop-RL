@@ -36,13 +36,14 @@ def save(f, name):
     f.savefig(os.path.join(D, name), facecolor=SURF)
     plt.close(f)
 
-def metrics(path):
+def metrics(path, ref=False):
     recs = [json.loads(l) for l in open(path)]
     games = next(r for r in recs if r['kind'] == 'config')['games']
     it = [(r['iter'] * games, r['residual']) for r in recs if r['kind'] == 'iter' and r['residual'] is not None]
     ece = [(r['iter'] * games, r['ece_net']) for r in recs if r['kind'] == 'calib']
     drops = [r['iter'] * games for r in recs if r['kind'] == 'lr_drop']
-    drops += [r['iter'] * games for r in recs if r['kind'] == 'resume'][1:]  # scratch30: second resume set lr 1e-4
+    if ref:  # scratch30 has no lr_drop records: its second resume set lr 1e-4
+        drops += [r['iter'] * games for r in recs if r['kind'] == 'resume'][1:]
     return np.array(it), np.array(ece), drops
 
 def smooth(y, k=9):
@@ -54,7 +55,7 @@ def curves():
     ser = [(lab[r], os.path.join(ROOT, 'runs', r, 'metrics.jsonl'), c, '-') for r, c in zip(RUNS, SERIES)]
     ser.append(('scratch30 (S)', S30, REF, '--'))
     for name, path, c, ls in ser:
-        rs, ece, drops = metrics(path)
+        rs, ece, drops = metrics(path, path == S30)
         for ax, (x, y), raw in ((axs[0], rs.T, True), (axs[1], ece.T, False)):
             if raw:
                 ax.plot(x, y, color=c, lw=0.6, alpha=0.25)

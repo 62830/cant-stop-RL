@@ -63,7 +63,7 @@ def play(args, hook=None):
     src, seed = args[:2]
     br = args[2] if len(args) > 2 else None
     eps = args[3] if len(args) > 3 else 0  # forced-stop warmup: stop instead of a chosen go w.p. eps (targets stay greedy)
-    erng = np.random.default_rng(seed) if eps else None
+    erng = np.random.default_rng((seed, 1)) if eps else None
     v = _vfn(src)
     random.seed(seed)
     agent, s, rec, t, solves, cands, gaps = SolverAgent(v), State(), [], 0.0, 0, [], []
@@ -217,7 +217,8 @@ def main():
         net = NetV.load(ckpt(ckdir, it), threads=a.threads).net
         warm = NetV.load(ckpt(ckdir, 0), threads=a.threads)
         last_t = max((json.loads(l).get('t', 0) for l in open(mf) if '"kind": "iter"' in l), default=0)
-        log(mf, kind='resume', iter=it, t=last_t, note='fresh buffer and optimizer')
+        dropped = any('"kind": "lr_drop"' in l for l in open(mf))  # an in-run LR drop already happened: keep lr_low
+        log(mf, kind='resume', iter=it, t=last_t, note='fresh buffer and optimizer', lr=a.lr_low if dropped else a.lr)
     else:
         net = make_net(tuple(int(h) for h in a.hidden.split(',')))
         info = dict(init='random')
@@ -241,7 +242,7 @@ def main():
         it, last_t = 0, 0
         warm.save(ckpt(ckdir, 0))
 
-    opt = torch.optim.Adam(net.parameters(), lr=a.lr)
+    opt = torch.optim.Adam(net.parameters(), lr=a.lr_low if a.resume and dropped else a.lr)
     buf = deque(maxlen=a.buffer)
     calib, eps_ended = [], False
     t_start = time.time() - last_t
@@ -259,7 +260,7 @@ def main():
         src = ckpt(ckdir, it)  # the snapshot (target net) workers play and bootstrap with
         do_resid = it % a.resid_every == 0
         br = (a.branch_end, a.branch_close, a.close_delta, a.rho_min, spath)
-        eps = a.stop_eps * max(0.0, 1 - it / a.stop_eps_iters)
+        eps = a.stop_eps * max(0.0, 1 - it / a.stop_eps_iters) if a.stop_eps and a.stop_eps_iters else 0.0
         if a.stop_eps and not eps and not eps_ended:
             eps_ended = log(mf, kind='stop_eps_end', iter=it)
         pjobs = pool.map_async(play, [(src, (a.seed + 1) * 10 ** 7 + it * 1000 + i, br) + ((eps,) if eps else ())
