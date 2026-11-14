@@ -1,4 +1,5 @@
 import os, sys, json, pickle, subprocess
+import pytest
 import numpy as np
 import torch
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -72,3 +73,57 @@ def test_tiny_training_no_warm(tmp_path):
     assert next(r for r in recs if r['kind'] == 'warm')['init'] == 'random'
     assert [r['iter'] for r in recs if r['kind'] == 'iter'] == [1]
     assert (d / 'ckpt' / 'it0000.pt').exists() and (d / 'ckpt' / 'it0001.pt').exists()
+
+def test_ensemble_mean_logit():
+    from value_net import Ensemble
+    from turn_solver import _stop_boards
+    torch.manual_seed(0)
+    nets = [NetV(make_net((128, 64))) for _ in range(3)]
+    e = pickle.loads(pickle.dumps(Ensemble([n.fused() for n in nets])))
+    with pytest.raises(TypeError, match='FusedNets'):
+        Ensemble([NetV(make_net((16,)))])
+    progs = boards(50, 2)
+    sig = lambda z: 1 / (1 + np.exp(-z))
+    for m in (0, 1):
+        ref = sig(np.mean([n.logits(progs, m).double().numpy() for n in nets], 0))
+        np.testing.assert_allclose(e(progs, m), ref, atol=1e-6)
+    for prog in progs[:10]:
+        p = 0
+        keys, _, _ = fr.enumerate_turn(prog, p)
+        bs, win = _stop_boards(prog, p, keys)
+        ask = ~win & (keys != 0)
+        q = np.concatenate([bs[ask], prog[None]])
+        ref = sig(np.mean([n.logits(q, 1 - p).double().numpy() for n in nets], 0))
+        np.testing.assert_allclose(e.banked(prog, p, keys[ask]), ref, atol=1e-5)
+
+def test_stop_eps_warmup(tmp_path, monkeypatch):
+    import importlib.util, td_train
+    from game import State
+    old = tmp_path / 'td_train_head.py'
+    try:
+        src = subprocess.run(['git', 'show', '3fbcb7a:td_train.py'], cwd=ROOT, capture_output=True, text=True)
+    except OSError:
+        src = None
+    if src is None or src.returncode or not src.stdout:
+        pytest.skip('git or pinned commit 3fbcb7a (td_train before stop_eps) unavailable')
+    old.write_text(src.stdout)
+    spec = importlib.util.spec_from_file_location('td_train_head', old)
+    head = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(head)
+    same = lambda x, y: all(np.array_equal(a[0], b[0]) and a[1:] == b[1:] for a, b in zip(x, y)) and len(x) == len(y)
+    for seed in (1, 2):
+        assert same(td_train.play((td_train.BEST_VH, seed, None, 0.0))[0], head.play((td_train.BEST_VH, seed))[0])
+    acts, update = [], State.update
+    monkeypatch.setattr(State, 'update', lambda s, a: (acts.append((s.wait_for_go, a.value)), update(s, a))[1])
+    td_train.play((td_train.BEST_VH, 3, None, 1.0))
+    gs = [v for w, v in acts if w]
+    assert gs and all(v == 2 for v in gs)  # every go/stop decision stops
+
+def test_resume_keeps_dropped_lr(tmp_path):
+    cmd = [sys.executable, os.path.join(ROOT, 'td_train.py'), '--run', 'test', '--workers', '2', '--warm_games', '3', '--games', '2',
+           '--iters', '1', '--n_resid', '4', '--hidden', '16,8', '--no_warm', '--n_set', '0', '--lr_drop_frac', '0', '--lr_low', '2e-4']
+    run = lambda *extra: subprocess.run(cmd + list(extra), cwd=tmp_path, capture_output=True, env={**os.environ, 'PYTHONPATH': ROOT})
+    assert run().returncode == 0 and run('--resume').returncode == 0
+    recs = [json.loads(l) for l in open(tmp_path / 'runs' / 'test' / 'metrics.jsonl')]
+    assert [r['lr'] for r in recs if r['kind'] == 'lr_drop'] == [2e-4]  # not dropped again: lr is already low
+    assert [r['lr'] for r in recs if r['kind'] == 'resume'] == [2e-4]

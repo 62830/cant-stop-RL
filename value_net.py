@@ -82,9 +82,9 @@ class FusedNet:
     def __call__(self, progs, m):
         return self.v(progs, m)
 
-    def banked(self, prog, p, keys):
-        # self(boards banked by p with tmps keys from prog, then prog itself, 1 - p)
-        return _banked(prog, p, keys, *self.w)
+    def banked(self, prog, p, keys, logit=False):
+        # self(boards banked by p with tmps keys from prog, then prog itself, 1 - p); logit: before the sigmoid
+        return _banked(prog, p, keys, *self.w, logit)
 
     def __getstate__(self):
         return self.v.__getstate__()
@@ -94,10 +94,26 @@ class FusedNet:
         v.__setstate__(d)
         self.__init__(v)
 
+class Ensemble:
+    # value_fn: sigmoid of the members' mean logit (members: FusedNets or checkpoint paths); banked via each member's kernel
+    def __init__(self, members):
+        self.m = [NetV.load(x).fused() if isinstance(x, str) else x for x in members]
+        bad = [type(x).__name__ for x in self.m if not isinstance(x, FusedNet)]
+        if bad:
+            raise TypeError(f'Ensemble members must be FusedNets (NetV with 2 hidden layers); got {bad}')
+
+    @torch.inference_mode()
+    def __call__(self, progs, m):
+        x = torch.from_numpy(features(progs, m)).float()
+        return torch.sigmoid(torch.stack([f.v.net(x)[:, 0] for f in self.m]).mean(0)).double().numpy()
+
+    def banked(self, prog, p, keys):
+        return 1 / (1 + np.exp(-np.mean([x.banked(prog, p, keys, True) for x in self.m], 0)))
+
 BLOCK = 32  # boards per layer-2 GEMM; 32 x 128 x 64 stays under OpenBLAS's multithreading threshold (single-threaded workers)
 
 @njit(cache=True, fastmath=True)
-def _flush(R, n, w2t, b2, w3, b3, out, at):
+def _flush(R, n, w2t, b2, w3, b3, out, at, logit):
     # out[at:at + n] = sigmoid(net) for the relu'd first-layer activations R[:n]
     Z = R[:n] @ w2t
     for b in range(n):
@@ -106,10 +122,10 @@ def _flush(R, n, w2t, b2, w3, b3, out, at):
             a = Z[b, j] + b2[j]
             if a > 0:
                 z += a * w3[j]
-        out[at + b] = 1 / (1 + np.exp(-z))
+        out[at + b] = z if logit else 1 / (1 + np.exp(-z))
 
 @njit(cache=True)
-def _banked(prog, p, keys, cum, b1, w2t, b2, w3, b3):
+def _banked(prog, p, keys, cum, b1, w2t, b2, w3, b3, logit):
     # queried for the opponent m = 1 - p, so p's columns are the "opp" block
     m, n1, n = 1 - p, len(b1), len(keys)
     base = b1.copy()
@@ -139,5 +155,5 @@ def _banked(prog, p, keys, cum, b1, w2t, b2, w3, b3):
         for j in range(n1):
             R[b, j] = max(base32[j] + d0[j] + d1[j] + d2[j], 0)
         if b == BLOCK - 1 or i == n:
-            _flush(R, b + 1, w2t, b2, w3, b3, out, i - b)
+            _flush(R, b + 1, w2t, b2, w3, b3, out, i - b, logit)
     return out
