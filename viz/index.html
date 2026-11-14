@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>td30 explorer</title>
+<style>
+:root { --bg:#f7f7f5; --card:#fff; --fg:#1d1d1f; --mute:#6b6b70; --line:#dcdcd8; --cell:#ececE8;
+  --p0:#2f6fd6; --p1:#e0702e; --bad:#d23c3c; --good:#2e9e5b; --mark:#fff; --go:#1f9e89; --stop:#b8478f; }
+@media (prefers-color-scheme: dark) { :root { --bg:#151517; --card:#1f1f22; --fg:#ececec; --mute:#9a9aa0;
+  --line:#34343a; --cell:#2b2b30; --p0:#5b93f0; --p1:#f08a4a; --mark:#f4f4f4; --go:#3cc4ac; --stop:#de6db3; } }
+* { box-sizing:border-box }
+body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.4 system-ui, sans-serif }
+header { display:flex; gap:4px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--line) }
+header b { margin-right:16px }
+.tab { border:0; background:none; color:var(--mute); padding:6px 12px; border-radius:6px; cursor:pointer; font:inherit }
+.tab.on { background:var(--card); color:var(--fg); box-shadow:0 0 0 1px var(--line) }
+main { display:flex; flex-wrap:wrap; gap:16px; padding:16px; align-items:flex-start }
+.card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px }
+.board { flex:0 1 420px; min-width:280px } .board svg { width:100%; display:block }
+.side { flex:1 1 340px; min-width:280px; display:flex; flex-direction:column; gap:12px }
+.row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin:4px 0 }
+.mute { color:var(--mute) } .err { color:var(--bad) } .num { font-variant-numeric:tabular-nums }
+button, select, input { font:inherit; color:inherit; background:var(--card); border:1px solid var(--line); border-radius:6px; padding:4px 10px }
+button { cursor:pointer } button:hover { border-color:var(--mute) } button:disabled { opacity:.4; cursor:default }
+button.on { background:var(--fg); color:var(--bg) }
+input.die { width:44px; text-align:center }
+table { border-collapse:collapse; width:100% } td, th { padding:3px 6px; text-align:right } th { color:var(--mute); font-weight:500 }
+td:first-child, th:first-child { text-align:left }
+tr.best td { font-weight:600 } tr.pick:hover { background:var(--cell); cursor:pointer }
+.bar { position:relative; height:16px; background:var(--p1); border-radius:4px; overflow:hidden }
+.bar > div { position:absolute; inset:0 auto 0 0; background:var(--p0) }
+.hbar { height:10px; background:var(--cell); border-radius:3px; overflow:hidden } .hbar > div { height:100%; background:var(--fg) }
+.dice { display:flex; gap:6px } .dice span { width:28px; height:28px; border:1px solid var(--line); border-radius:6px;
+  display:grid; place-items:center; font-weight:600 }
+.big { font-size:22px; font-weight:600 }
+.acts button { min-width:90px; text-align:left } .acts small { display:block; color:var(--mute) }
+.hide { display:none !important }
+#chart svg { width:100%; display:block } .wide { flex:1 1 100% }
+#maps { display:flex; flex-wrap:wrap; gap:12px } #maps svg { display:block } #maps rect[data-i] { cursor:pointer }
+.leg { display:inline-block; width:120px; height:10px; border-radius:3px; background:linear-gradient(90deg, var(--stop), var(--cell), var(--go)) }
+</style>
+</head>
+<body>
+<header><b>td30 explorer</b>
+  <button class="tab on" data-t="edit">Edit</button><button class="tab" data-t="play">Play</button><button class="tab" data-t="hist">History</button><button class="tab" data-t="bnd">Boundary</button>
+</header>
+
+<main>
+  <div class="card wide hide" id="chartCard"><div class="row"><b>P(P0 wins) per decision</b>
+    <span class="mute">● matched td30 &nbsp; <span style="color:var(--bad)">●</span> deviation (size = cost) &nbsp; ✕ bust &nbsp; ┆ turn</span>
+    <span style="flex:1"></span><button id="hPrev">←</button><button id="hNext">→</button>
+    <button id="hEdit">Open in Edit</button><button id="hExp">Export</button><label><button id="hImpB">Import</button></label>
+    <input type="file" id="hImp" accept=".json" class="hide"></div><div id="chart"></div></div>
+  <div class="card wide hide" id="bndCard"><div class="row"><b>go − stop, temp markers on 3 columns</b>
+    <span class="mute">stop <span class="leg"></span> go (±10 pts) &nbsp; ● stop wins &nbsp; ▢ current tmp &nbsp; ━ decision boundary</span>
+    <span class="err" id="bndErr"></span></div><div id="maps"></div></div>
+  <div class="card board"><div id="board"></div><div class="row mute" id="boardNote"></div></div>
+  <div class="side">
+    <div id="editCtl" class="card">
+      <div class="row">Paint <span id="tools"></span></div>
+      <div class="row">To move <button data-p="0">P0</button><button data-p="1">P1</button>
+        <label><input type="checkbox" id="wfg"> go/stop phase</label></div>
+      <div class="row">Dice <span id="edDice"></span><button id="rollEd">roll</button><button id="clrEd">clear</button></div>
+      <div class="row"><button id="snap">Snapshot A</button><button id="clrBoard">Reset board</button></div>
+      <div class="err" id="edErr"></div>
+    </div>
+    <div id="playCtl" class="card hide">
+      <div class="row"><select id="mode"><option value="0">You are P0</option><option value="1">You are P1</option>
+        <option value="w">Watch td30 vs td30</option></select><button id="newGame">New game</button>
+        <label><input type="checkbox" id="hints" checked> show eval</label></div>
+      <div class="row"><button id="pause">Pause</button><button id="stepBtn">Step</button>
+        <label class="mute">delay <input type="range" id="speed" min="0" max="2000" value="700" style="width:110px"></label></div>
+      <div class="row">Next roll <span id="nextDice"></span><span class="mute">(blank = random)</span></div>
+      <div class="big" id="status"></div>
+      <div class="row"><div class="dice" id="pDice"></div></div>
+      <div class="row acts" id="acts"></div>
+      <div class="mute" id="log"></div>
+      <div id="spark"></div>
+    </div>
+    <div id="bndCtl" class="card hide">
+      <div class="row">Columns <span id="bCols"></span></div>
+      <div class="row">Slice on <span id="bSlice"></span></div>
+      <div class="row"><span id="bAxes"></span><button id="bSwap">swap x/y</button></div>
+      <div class="mute">P<span id="bP"></span> to move, board from Edit. Click a cell to open it in Edit.</div>
+    </div>
+    <div class="card" id="panel"></div>
+  </div>
+</main>
+
+<script>
+const LEN = [0, 0, 3, 5, 7, 9, 11, 13, 11, 9, 7, 5, 3];
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const pct = v => v == null ? '—' : (100 * v).toFixed(1) + '%';
+const dlt = v => v == null ? '' : (v >= 0 ? '+' : '−') + Math.abs(100 * v).toFixed(1);
+const clone = o => JSON.parse(JSON.stringify(o));
+const blank = () => ({prog: [Array(13).fill(0), Array(13).fill(0)], p: 0, tmp: Array(13).fill(0), dice: null, wait_for_go: false});
+const mvs = m => m[1] ? `${m[0]} & ${m[1]}` : `${m[0]}`;
+const pc = p => `var(--p${p})`;
+async function post(url, body) {
+  const r = await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error);
+  return j;
+}
+const head = e => e.v_roll ?? e.v_solved, headP0 = e => e.v_roll_p0 ?? e.v_solved_p0;
+
+// ---------- board ----------
+const CS = 26, GX = 34, TOP = 8, W = 11 * GX + 8, H = TOP + 13 * CS + 30;
+function board(s, clickable) {
+  let o = `<svg viewBox="0 0 ${W} ${H}">`;
+  for (let c = 2; c <= 12; c++) {
+    const x = 8 + (c - 2) * GX, w = GX - 8, claim = [0, 1].find(q => s.prog[q][c] == LEN[c]);
+    for (let h = 1; h <= LEN[c]; h++) {
+      const y = TOP + (13 - h) * CS, a = s.prog[0][c] >= h, b = s.prog[1][c] >= h;
+      const t = s.tmp[c] && h > s.prog[s.p][c] && h <= s.tmp[c];
+      o += `<g data-c="${c}" data-h="${h}" style="cursor:${clickable ? 'pointer' : 'default'}">`;
+      o += `<rect x="${x}" y="${y + 1}" width="${w}" height="${CS - 3}" rx="4" fill="var(--cell)"/>`;
+      if (a && b) o += `<rect x="${x}" y="${y + 1}" width="${w / 2}" height="${CS - 3}" rx="4" fill="var(--p0)"/><rect x="${x + w / 2}" y="${y + 1}" width="${w / 2}" height="${CS - 3}" rx="4" fill="var(--p1)"/>`;
+      else if (a || b) o += `<rect x="${x}" y="${y + 1}" width="${w}" height="${CS - 3}" rx="4" fill="${pc(a ? 0 : 1)}"/>`;
+      if (t) o += `<rect x="${x}" y="${y + 1}" width="${w}" height="${CS - 3}" rx="4" fill="${pc(s.p)}" opacity=".3"/>`;
+      if (h == s.tmp[c]) o += `<circle cx="${x + w / 2}" cy="${y + CS / 2 - 0.5}" r="7" fill="var(--mark)" stroke="var(--fg)" stroke-width="2"/>`;
+      o += `</g>`;
+    }
+    o += `<text x="${x + w / 2}" y="${H - 10}" text-anchor="middle" font-size="13" font-weight="${claim != null ? 700 : 400}" fill="${claim != null ? pc(claim) : 'var(--mute)'}">${c}</text>`;
+  }
+  return o + '</svg>';
+}
+function drawBoard(s, clickable) {
+  $('#board').innerHTML = board(s, clickable);
+  const sc = [0, 1].map(q => LEN.filter((l, c) => c > 1 && s.prog[q][c] == l).length);
+  $('#boardNote').innerHTML = `<span style="color:var(--p0)">■ P0</span> ${sc[0]}/3 &nbsp; <span style="color:var(--p1)">■ P1</span> ${sc[1]}/3 &nbsp; ○ temp markers (P${s.p})`;
+}
+
+// ---------- eval panel ----------
+function evalHTML(e, s, snap, taken) {
+  if (!e) return '<span class="mute">no evaluation</span>';
+  const d = k => snap ? ` <span class="mute num">${dlt(e[k] - snap[k])}</span>` : '';
+  const P = `P${e.p}`, hp = headP0(e);
+  let o = `<div class="row"><b>P(P0 wins)</b><span class="num big">${pct(hp)}</span>${snap ? `<span class="mute num">Δ ${dlt(hp - headP0(snap))} vs A</span>` : ''}</div>
+    <div class="bar"><div style="width:${100 * hp}%"></div></div>
+    <table class="num" style="margin-top:8px"><tr><th>${P} to move</th><th>P(${P} wins)</th><th>P(P0 wins)</th></tr>
+    <tr><td>net (turn start)</td><td>${pct(e.v_net)}</td><td>${pct(e.v_net_p0)}${d('v_net_p0')}</td></tr>
+    <tr><td>solved</td><td>${pct(e.v_solved)}</td><td>${pct(e.v_solved_p0)}${d('v_solved_p0')}</td></tr>`;
+  if (e.v_roll != null) o += `<tr><td>after this roll</td><td>${pct(e.v_roll)}</td><td>${pct(e.v_roll_p0)}${d('v_roll_p0')}</td></tr>`;
+  o += `</table>`;
+  if (!s.tmp.some(x => x) && s.dice == null) o += `<div class="mute">search gain (solved − net): <span class="num">${dlt(e.v_solved - e.v_net)}</span></div>`;
+  if (e.stop != null || e.go != null) {
+    const r = (n, v, best) => `<tr${best ? ' class="best"' : ''}><td>${n}</td><td style="width:50%"><div class="hbar"><div style="width:${100 * (v ?? 0)}%"></div></div></td><td>${pct(v)}</td></tr>`;
+    const g = e.go ?? -1, st = e.stop ?? -1;
+    o += `<table class="num" style="margin-top:8px"><tr><th>${s.wait_for_go ? 'decision' : 'if the turn ended here'}</th><th></th><th>P(${P})</th></tr>
+      ${r('stop', e.stop, st >= g)}${r('go', e.go, g > st)}</table>
+      <div class="mute">P(bust on next roll) ${pct(e.pbust)} · value after bust ${pct(e.bust_val)}${e.decision ? ` · td30: <b>${e.decision}</b>` : ''}</div>`;
+  }
+  if (e.picks) {
+    if (e.bust) o += `<div class="err" style="margin-top:8px">bust — no legal pick (${P} falls to ${pct(e.bust_val)})</div>`;
+    else {
+      o += `<table class="num" style="margin-top:8px"><tr><th>pick</th><th>P(${P})</th><th>Δ best</th><th>P(P0)</th></tr>`;
+      for (const k of e.picks) {
+        const tk = taken && taken.pick && taken.pick + '' == k.move + '';
+        o += `<tr class="pick${k === e.picks[0] ? ' best' : ''}" data-m="${k.move}"><td>${mvs(k.move)}${tk ? ' ◀ taken' : ''}</td><td>${pct(k.value)}</td><td>${dlt(k.value - e.picks[0].value)}</td><td>${pct(k.value_p0)}</td></tr>`;
+      }
+      o += `</table>`;
+    }
+  }
+  return o;
+}
+
+// ---------- tabs ----------
+let tab = 'edit';
+function setTab(t) {
+  tab = t; $('#panel').style.opacity = 1;
+  $$('.tab').forEach(b => b.classList.toggle('on', b.dataset.t == t));
+  $('#editCtl').classList.toggle('hide', t != 'edit');
+  $('#playCtl').classList.toggle('hide', t != 'play');
+  $('#chartCard').classList.toggle('hide', t != 'hist');
+  $('#bndCtl').classList.toggle('hide', t != 'bnd'); $('#bndCard').classList.toggle('hide', t != 'bnd');
+  ({edit: renderEdit, play: renderPlay, hist: renderHist, bnd: openBnd})[t]();
+}
+$$('.tab').forEach(b => b.onclick = () => setTab(b.dataset.t));
+
+// ---------- edit ----------
+const E = {s: blank(), tool: 0, ev: null, snap: null, err: '', timer: null, seq: 0, stale: false};
+$('#tools').innerHTML = ['P0', 'P1', 'temp'].map((n, i) => `<button data-tool="${i}">${n}</button>`).join(' ');
+$('#edDice').innerHTML = [0, 1, 2, 3].map(i => `<input class="die" type="number" min="1" max="6">`).join('');
+$('#nextDice').innerHTML = $('#edDice').innerHTML;
+$$('[data-tool]').forEach(b => b.onclick = () => { E.tool = +b.dataset.tool; renderEdit(); });
+$$('[data-p]').forEach(b => b.onclick = () => { E.s.p = +b.dataset.p; E.s.tmp = Array(13).fill(0); E.s.wait_for_go = false; changed(); });
+$('#wfg').onchange = () => { E.s.wait_for_go = $('#wfg').checked; if (E.s.wait_for_go) setDice(null); changed(); };
+$$('#edDice input').forEach(i => i.oninput = () => { E.s.dice = readDice('#edDice'); changed(); });
+$('#rollEd').onclick = () => { setDice([1, 2, 3, 4].map(() => 1 + Math.floor(6 * Math.random()))); changed(); };
+$('#clrEd').onclick = () => { setDice(null); changed(); };
+$('#clrBoard').onclick = () => { E.s = blank(); setDice(null); changed(); };
+$('#snap').onclick = () => { E.snap = E.snap ? null : E.ev; renderEdit(); };
+function readDice(sel) {
+  const d = $$(sel + ' input').map(i => parseInt(i.value));
+  return d.every(x => x >= 1 && x <= 6) ? d : null;
+}
+function setDice(d) { E.s.dice = d; $$('#edDice input').forEach((i, k) => i.value = d ? d[k] : ''); }
+$('#board').onclick = ev => {
+  const g = ev.target.closest('g[data-c]');
+  if (!g || tab != 'edit') return;
+  const c = +g.dataset.c, h = +g.dataset.h, s = E.s;
+  const arr = E.tool == 2 ? s.tmp : s.prog[E.tool];
+  arr[c] = arr[c] == h ? h - 1 : h;
+  if (E.tool < 2 && arr[c] == LEN[c]) s.prog[1 - E.tool][c] = 0;  // a claim resets the other player
+  if (E.tool == 2 && !s.dice) s.wait_for_go = s.tmp.some(x => x);  // markers without dice: the go/stop phase
+  changed();
+};
+$('#panel').onclick = ev => {  // Edit: clicking a pick applies it
+  const r = ev.target.closest('tr[data-m]');
+  const k = r && tab == 'edit' && !E.stale && E.ev && E.ev.picks && E.ev.picks.find(k => k.move + '' == r.dataset.m);
+  if (!k) return;
+  E.s.tmp = k.tmp; E.s.wait_for_go = true; setDice(null); changed();
+};
+function changed() {
+  clearTimeout(E.timer);
+  E.stale = true; renderEdit();
+  const seq = ++E.seq, s = clone(E.s);
+  E.timer = setTimeout(async () => {
+    let ev = null, err = '';
+    try { await post('/validate', s); ev = await post('/eval', s); } catch (x) { err = x.message; }
+    if (seq != E.seq) return;  // a newer edit owns the panel
+    E.ev = ev; E.err = err; E.stale = false; renderEdit();
+  }, 200);
+}
+function renderEdit() {
+  if (tab != 'edit') return;
+  $$('[data-tool]').forEach(b => b.classList.toggle('on', +b.dataset.tool == E.tool));
+  $$('[data-p]').forEach(b => b.classList.toggle('on', +b.dataset.p == E.s.p));
+  $('#wfg').checked = E.s.wait_for_go;
+  $('#snap').textContent = E.snap ? 'Clear snapshot A' : 'Snapshot A';
+  $('#edErr').textContent = E.err;
+  drawBoard(E.s, true);
+  $('#panel').innerHTML = evalHTML(E.ev, E.s, E.snap);
+  $('#panel').style.opacity = E.stale ? .5 : 1;
+}
+function openInEdit(s) {
+  E.s = clone(s); delete E.s.winner; setDice(E.s.dice); E.snap = null; setTab('edit'); changed();
+}
+
+// ---------- play ----------
+const G = {s: null, ev: null, hist: [], mode: '0', paused: false, busy: false, timer: null, log: [], tok: 0};
+const bot = () => G.mode == 'w' || G.s.p != +G.mode;
+const delay = () => +$('#speed').value;
+function nextRoll() {
+  const d = readDice('#nextDice');
+  if (d) $$('#nextDice input').forEach(i => i.value = '');
+  return d;
+}
+async function newGame() {
+  clearTimeout(G.timer); G.tok++;
+  G.mode = $('#mode').value; G.hist = []; G.log = []; sel = 0;
+  G.s = (await post('/step', {state: blank(), action: null, dice: nextRoll()})).state;
+  await advance();
+}
+async function advance() {
+  const tok = G.tok;
+  G.ev = G.s.winner != null ? null : await post('/eval', G.s);
+  if (tok != G.tok) return;
+  renderPlay();
+  if (G.s.winner == null && bot() && !G.paused) G.timer = setTimeout(botMove, delay());
+}
+const td30 = e => e.decision ?? (e.bust ? 'null' : {pick: e.picks[0].move});  // = /act, from the eval in hand
+function botMove() {
+  if (!G.busy && G.ev && G.s.winner == null && bot()) act(td30(G.ev), 'td30');
+}
+async function act(a, actor) {
+  if (G.busy || !G.ev) return;
+  G.busy = true; clearTimeout(G.timer);
+  const tok = G.tok;
+  try {
+    const roll = a == 'go' || a == 'stop' ? nextRoll() : null;
+    const r = await post('/step', {state: G.s, action: a, dice: roll});
+    if (tok != G.tok) return;
+    G.hist.push({state: G.s, actor, action: a, eval: G.ev, events: r.events});
+    for (const e of r.events) G.log.unshift(e.type == 'bust' ? `P${e.p} busts on ${e.dice.join(' ')}` : e.type == 'win' ? `P${e.p} wins` : `P${e.p} banks`);
+    G.log = G.log.slice(0, 4);
+    G.s = r.state; G.ev = null;
+  } finally { G.busy = false; }
+  await advance();
+}
+$('#newGame').onclick = newGame;
+$('#pause').onclick = () => { G.paused = !G.paused; clearTimeout(G.timer); if (!G.paused && G.s) advance(); renderPlay(); };
+$('#stepBtn').onclick = () => { if (G.s && bot()) botMove(); };
+$('#hints').onchange = renderPlay;
+$('#mode').onchange = newGame;
+$('#acts').onclick = ev => {
+  const b = ev.target.closest('button');
+  if (b && G.s && !bot()) act(b.dataset.a ? b.dataset.a : {pick: b.dataset.m.split(',').map(Number)}, 'you');
+};
+function renderPlay() {
+  if (tab != 'play') return;
+  $('#pause').textContent = G.paused ? 'Play' : 'Pause';
+  if (!G.s) { $('#status').textContent = 'Press New game'; $('#panel').innerHTML = ''; drawBoard(blank(), false); return; }
+  const s = G.s, e = G.ev, hint = $('#hints').checked, you = !bot();
+  drawBoard(s, false);
+  $('#status').innerHTML = s.winner != null ? `<span style="color:${pc(s.winner)}">P${s.winner} wins</span>`
+    : `<span style="color:${pc(s.p)}">P${s.p}</span> ${you ? '— your move' : '— td30' + (G.paused ? ' (paused)' : '')}`;
+  $('#pDice').innerHTML = (s.dice || []).map(d => `<span>${d}</span>`).join('');
+  let a = '';
+  if (s.winner == null && e) {
+    const v = x => hint ? `<small>${pct(x)}</small>` : '';
+    if (s.wait_for_go) a = `<button data-a="go" ${you ? '' : 'disabled'}>go${v(e.go)}</button><button data-a="stop" ${you ? '' : 'disabled'}>stop${v(e.stop)}</button>`;
+    else if (e.picks) {
+      const ps = hint ? e.picks : [...e.picks].sort((x, y) => (x.move + '').localeCompare(y.move + ''));
+      a = e.bust ? `<button data-a="null" ${you ? '' : 'disabled'}>bust — pass</button>`
+        : ps.map(k => `<button data-m="${k.move}" ${you ? '' : 'disabled'}>${mvs(k.move)}${v(k.value)}</button>`).join('');
+    }
+  }
+  $('#acts').innerHTML = a;
+  $('#log').innerHTML = G.log.join('<br>');
+  const pts = G.hist.concat(e ? [{state: s, eval: e, cur: true}] : []);
+  $('#spark').innerHTML = hint ? chart(pts, 320, 70, -1, true) : '';
+  $('#panel').innerHTML = hint ? evalHTML(e, s) : '<span class="mute">eval hidden</span>';
+}
+
+// ---------- history ----------
+let sel = 0;
+function cost(h) {
+  const e = h.eval;
+  if (!e || h.action == 'null') return 0;
+  if (typeof h.action == 'string') return Math.max(e.go ?? 0, e.stop ?? 0) - (e[h.action] ?? 0);
+  const k = e.picks.find(k => k.move + '' == h.action.pick + '');
+  return k ? e.picks[0].value - k.value : 0;
+}
+function chart(hist, w, h, cur, small) {
+  const n = hist.length, last = hist[n - 1], won = last && last.events && last.events.find(x => x.type == 'win');
+  const m = small ? 4 : 14, X = i => m + (w - 2 * m) * (n + !!won > 1 ? i / (n + !!won - 1) : 0.5), Y = v => m + (h - 2 * m) * (1 - v);
+  let o = `<svg viewBox="0 0 ${w} ${h}"><line x1="0" x2="${w}" y1="${Y(.5)}" y2="${Y(.5)}" stroke="var(--line)" stroke-dasharray="3 3"/>`;
+  const vs = hist.map(x => headP0(x.eval));
+  if (won) vs.push(won.p == 0 ? 1 : 0);
+  hist.forEach((x, i) => { if (i && x.state.p != hist[i - 1].state.p) o += `<line x1="${(X(i) + X(i - 1)) / 2}" x2="${(X(i) + X(i - 1)) / 2}" y1="0" y2="${h}" stroke="var(--line)"/>`; });
+  o += `<polyline fill="none" stroke="var(--fg)" stroke-width="${small ? 1.5 : 1.5}" points="${vs.map((v, i) => `${X(i)},${Y(v)}`).join(' ')}"/>`;
+  if (!small) hist.forEach((x, i) => {
+    const c = cost(x), r = 3.5 + Math.min(8, 300 * c);
+    if (x.events && x.events.some(e => e.type == 'bust')) o += `<text x="${X(i)}" y="${Y(vs[i]) - 9}" text-anchor="middle" font-size="12" fill="var(--bad)">✕</text>`;
+    o += `<circle data-i="${i}" cx="${X(i)}" cy="${Y(vs[i])}" r="${r}" fill="${c > 1e-9 ? 'var(--bad)' : pc(x.state.p)}" stroke="${i == cur ? 'var(--fg)' : 'none'}" stroke-width="2" style="cursor:pointer"><title>#${i} P${x.state.p} ${x.actor} ${typeof x.action == 'string' ? x.action : mvs(x.action.pick)} · P(P0) ${pct(vs[i])}${c > 1e-9 ? ' · cost ' + dlt(-c) : ''}</title></circle>`;
+  });
+  return o + '</svg>';
+}
+function renderHist() {
+  if (tab != 'hist') return;
+  const H = G.hist;
+  if (!H.length) { $('#chart').innerHTML = '<p class="mute">No decisions yet — play a game or import one.</p>'; drawBoard(blank(), false); $('#panel').innerHTML = ''; return; }
+  sel = Math.max(0, Math.min(sel, H.length - 1));
+  $('#chart').innerHTML = chart(H, 900, 220, sel, false);
+  const x = H[sel], c = cost(x);
+  drawBoard(x.state, false);
+  const act = typeof x.action == 'string' ? x.action : 'pick ' + mvs(x.action.pick);
+  $('#panel').innerHTML = `<div class="row"><b>#${sel}</b> <span style="color:${pc(x.state.p)}">P${x.state.p}</span> (${x.actor}) chose <b>${act}</b>
+    ${c > 1e-9 ? `<span class="err">− ${(100 * c).toFixed(1)} pts vs td30</span>` : '<span style="color:var(--good)">= td30</span>'}</div>
+    ${x.state.dice ? `<div class="row dice">${x.state.dice.map(d => `<span>${d}</span>`).join('')}</div>` : ''}
+    ${(x.events || []).map(e => `<div class="mute">→ ${e.type} P${e.p}${e.dice ? ' on ' + e.dice.join(' ') : ''}</div>`).join('')}` + evalHTML(x.eval, x.state, null, x.action);
+}
+$('#chart').onclick = ev => { const c = ev.target.closest('[data-i]'); if (c) { sel = +c.dataset.i; renderHist(); } };
+$('#hPrev').onclick = () => { sel--; renderHist(); };
+$('#hNext').onclick = () => { sel++; renderHist(); };
+$('#hEdit').onclick = () => G.hist[sel] && openInEdit(G.hist[sel].state);
+document.onkeydown = ev => {
+  if (tab != 'hist' || ev.target.tagName == 'INPUT') return;
+  if (ev.key == 'ArrowLeft') { sel--; renderHist(); } else if (ev.key == 'ArrowRight') { sel++; renderHist(); }
+};
+$('#hExp').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify({hist: G.hist, state: G.s}, null, 1)], {type: 'application/json'}));
+  a.download = `td30-game-${Date.now()}.json`; a.click();
+};
+// imported files are untrusted: rebuild every entry from typed fields (numbers / known strings) or drop it
+const N = x => x == null ? null : +x, nums = (a, n) => a.slice(0, n).map(Number), tryc = f => { try { return f(); } catch (x) { return null; } };
+const one = (x, ok) => ok.includes(x) ? x : null;
+const cleanState = s => ({prog: [0, 1].map(q => nums(s.prog[q], 13)), p: +s.p, tmp: nums(s.tmp, 13), dice: s.dice ? nums(s.dice, 4) : null,
+  wait_for_go: !!s.wait_for_go, ...(s.winner != null ? {winner: +s.winner} : {})});
+function cleanEval(e) {
+  const o = {bust: !!e.bust, decision: one(e.decision, ['go', 'stop']) ?? undefined};
+  for (const k of ['p', 'v_net', 'v_solved', 'stop', 'go', 'pbust', 'bust_val', 'v_roll', 'best'])
+    for (const kk of [k, k + '_p0']) if (kk in e) o[kk] = N(e[kk]);
+  if (e.picks) o.picks = e.picks.map(k => ({move: nums(k.move, 2), tmp: nums(k.tmp, 13), value: +k.value, value_p0: +k.value_p0}));
+  if (!Number.isFinite(headP0(o))) throw 0;
+  return o;
+}
+const cleanEntry = h => tryc(() => {
+  const a = typeof h.action == 'string' ? one(h.action, ['go', 'stop', 'null']) : {pick: nums(h.action.pick, 2)};
+  if (a == null) throw 0;
+  const ev = (h.events || []).map(e => ({type: one(e.type, ['bust', 'banked', 'win']), p: +e.p, ...(e.dice ? {dice: nums(e.dice, 4)} : {})}));
+  if (ev.some(e => !e.type)) throw 0;
+  return {state: cleanState(h.state), actor: h.actor == 'you' ? 'you' : 'td30', action: a, eval: cleanEval(h.eval), events: ev};
+});
+$('#hImpB').onclick = () => $('#hImp').click();
+$('#hImp').onchange = async () => {
+  const f = $('#hImp').files[0];
+  if (!f) return;
+  let d = {};
+  try { d = JSON.parse(await f.text()); } catch (x) { alert('not JSON'); }
+  clearTimeout(G.timer); G.tok++; G.paused = true;
+  G.hist = (Array.isArray(d.hist) ? d.hist : []).map(cleanEntry).filter(Boolean);
+  G.s = tryc(() => cleanState(d.state)); G.ev = null; G.log = []; sel = 0;
+  $('#hImp').value = ''; renderHist();
+};
+
+// ---------- boundary ----------
+// [i][j][k] grids in cols order; the view picks a slice axis and x/y among the other two (client-side only)
+const BS = 10, B = {cols: null, src: '', ax: [0, 1, 2], d: null, err: '', seq: 0, key: '', hov: null};
+const blockedC = (s, c) => s.prog[0][c] == LEN[c] || s.prog[1][c] == LEN[c];
+function openBnd() {
+  // default columns when the board, p or a 3-marker tmp changed: the tmp columns, else 6 7 8 skipping blocked ones
+  const s = E.s, t = [...Array(13).keys()].filter(c => s.tmp[c]), t3 = t.length == 3 ? t : null, src = JSON.stringify([s.prog, s.p, t3]);
+  if (src != B.src) {
+    B.src = src;
+    const cols = t3 || [6, 7, 8, 5, 9, 4, 10, 3, 11, 2, 12].filter(c => !blockedC(s, c)).slice(0, 3);
+    const srt = c => [...c].sort((a, b) => a - b) + '';
+    if (B.cols && srt(cols) == srt(B.cols)) return fetchBnd();  // same columns: keep the axes
+    B.cols = cols; B.hov = null;
+    const n = B.cols.map(c => LEN[c] - s.prog[s.p][c]), sl = n.indexOf(Math.min(...n));
+    B.ax = [sl, ...[0, 1, 2].filter(a => a != sl)];
+  }
+  fetchBnd();
+}
+async function fetchBnd() {
+  const s = E.s, key = JSON.stringify([s.prog, s.p, B.cols]);
+  if (key != B.key) {
+    B.key = key; B.d = B.hov = null; B.err = '';
+    const seq = ++B.seq;
+    renderBnd();
+    let d = null, err = '';
+    try { d = await post('/boundary', {state: {...blank(), prog: s.prog, p: s.p}, cols: B.cols}); } catch (x) { err = x.message; }
+    if (seq != B.seq) return;
+    B.d = d; B.err = err; B.hov = null;
+    if (!d) B.key = '';  // retry on the next fetch
+  }
+  renderBnd();
+}
+function bcell(idx) {  // idx in cols order -> cell info
+  const d = B.d, g = a => a[idx[0]][idx[1]][idx[2]], h = idx.map((x, a) => d.lo[a] + x);
+  const stop = g(d.stop), go = g(d.go), win = g(d.win);
+  return {h, stop, go, win, pbust: g(d.pbust), m: stop == null || go == null ? null : go - stop,
+    dec: win ? 'stop' : stop == null || go == null ? null : go > stop ? 'go' : 'stop'};
+}
+function bmap(z) {  // one slice: heights of cols[ax[0]] fixed at index z
+  const d = B.d, [sa, xa, ya] = B.ax, nx = d.hi[xa] - d.lo[xa] + 1, ny = d.hi[ya] - d.lo[ya] + 1, C = 16, L = 22, T = 18;
+  const s = E.s, cur = [0, 1, 2].every(a => s.tmp[d.cols[a]]) && s.tmp.filter(x => x).length == 3 && s.tmp[d.cols[sa]] == d.lo[sa] + z;
+  const at = (x, y) => { const i = []; i[sa] = z; i[xa] = x; i[ya] = y; return i; };
+  const X = x => L + x * C, Y = y => T + (ny - 1 - y) * C;
+  let o = `<svg width="${L + nx * C + 4}" height="${T + ny * C + 16}"><text x="${L}" y="12" font-size="11" fill="var(--fg)">col ${d.cols[sa]} = ${d.lo[sa] + z}</text>`;
+  const cs = [];
+  for (let x = 0; x < nx; x++) for (let y = 0; y < ny; y++) {
+    const i = at(x, y), c = cs[x * ny + y] = bcell(i);
+    const f = c.win ? 'var(--stop)' : c.m == null ? 'var(--cell)' : c.m > 0 ? 'var(--go)' : 'var(--stop)';
+    const op = c.win || c.m == null ? 1 : Math.min(1, Math.abs(c.m) * 100 / BS);
+    o += `<rect x="${X(x)}" y="${Y(y)}" width="${C}" height="${C}" fill="var(--cell)"/><rect data-i="${i}" x="${X(x)}" y="${Y(y)}" width="${C}" height="${C}" fill="${f}" fill-opacity="${op}"/>`;
+    if (c.win) o += `<circle cx="${X(x) + C / 2}" cy="${Y(y) + C / 2}" r="2.5" fill="var(--mark)" pointer-events="none"/>`;
+  }
+  const dec = (x, y) => cs[x * ny + y].dec, ln = (x1, y1, x2, y2) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="var(--fg)" stroke-width="2" stroke-linecap="square" pointer-events="none"/>`;
+  for (let x = 0; x < nx; x++) for (let y = 0; y < ny; y++) {
+    const a = dec(x, y);
+    if (a && x + 1 < nx && dec(x + 1, y) && dec(x + 1, y) != a) o += ln(X(x + 1), Y(y), X(x + 1), Y(y) + C);
+    if (a && y + 1 < ny && dec(x, y + 1) && dec(x, y + 1) != a) o += ln(X(x), Y(y), X(x) + C, Y(y));
+  }
+  if (cur) { const x = s.tmp[d.cols[xa]] - d.lo[xa], y = s.tmp[d.cols[ya]] - d.lo[ya];
+    o += `<rect x="${X(x) + 1}" y="${Y(y) + 1}" width="${C - 2}" height="${C - 2}" fill="none" stroke="var(--fg)" stroke-width="2" stroke-dasharray="3 2" pointer-events="none"/>`; }
+  for (let x = 0; x < nx; x++) o += `<text x="${X(x) + C / 2}" y="${T + ny * C + 12}" text-anchor="middle" font-size="9" fill="var(--mute)">${d.lo[xa] + x}</text>`;
+  for (let y = 0; y < ny; y++) o += `<text x="${L - 4}" y="${Y(y) + C / 2 + 3}" text-anchor="end" font-size="9" fill="var(--mute)">${d.lo[ya] + y}</text>`;
+  return o + '</svg>';
+}
+function renderBnd() {
+  if (tab != 'bnd') return;
+  const s = E.s;
+  drawBoard(s, false);
+  $('#bP').textContent = s.p;
+  $('#bCols').innerHTML = B.cols.map((c, a) => `<select data-a="${a}">${[2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(k =>
+    `<option value="${k}" ${k == c ? 'selected' : ''} ${blockedC(s, k) ? 'disabled' : ''}>${k}</option>`).join('')}</select>`).join(' ');
+  $('#bSlice').innerHTML = B.cols.map((c, a) => `<button data-sl="${a}" class="${B.ax[0] == a ? 'on' : ''}">col ${c}</button>`).join('');
+  $('#bAxes').innerHTML = `x: col ${B.cols[B.ax[1]]} &nbsp; y: col ${B.cols[B.ax[2]]}`;
+  $('#bndErr').textContent = B.err;
+  const d = B.d;
+  $('#maps').innerHTML = !d ? `<span class="mute">${B.err ? '' : 'solving…'}</span>`
+    : [...Array(d.hi[B.ax[0]] - d.lo[B.ax[0]] + 1).keys()].map(bmap).join('');
+  bPanel();
+}
+function bPanel() {
+  const s = E.s, d = B.d, c = d && B.hov && bcell(B.hov);
+  $('#panel').innerHTML = !d ? '' : `<div class="row"><b>P(P${s.p} wins)</b> net at turn start <span class="num">${pct(d.v_net)}</span></div>` + (!c
+    ? '<span class="mute">hover a cell</span>'
+    : `<table class="num"><tr><th>heights</th><th>${d.cols.map((k, a) => `${k}: ${c.h[a]}`).join(' · ')}</th></tr>
+      <tr><td>stop</td><td>${pct(c.stop)}</td></tr><tr><td>go</td><td>${pct(c.go)}</td></tr>
+      <tr><td>P(bust)</td><td>${pct(c.pbust)}</td></tr><tr><td>go − stop</td><td>${c.m == null ? '—' : dlt(c.m) + ' pts'}</td></tr>
+      <tr class="best"><td>decision</td><td>${c.dec ?? '—'}${c.win ? ' (stop wins)' : ''}</td></tr></table>`);
+}
+$('#bCols').onchange = ev => {  // picking a column used on another axis swaps the two
+  const a = +ev.target.dataset.a, v = +ev.target.value, old = B.cols[a];
+  B.cols = B.cols.map((c, b) => b == a ? v : c == v ? old : c); fetchBnd();
+};
+$('#bSlice').onclick = ev => { const b = ev.target.closest('[data-sl]'); if (b) { const a = +b.dataset.sl; B.ax = [a, ...[0, 1, 2].filter(x => x != a)]; renderBnd(); } };
+$('#bSwap').onclick = () => { B.ax = [B.ax[0], B.ax[2], B.ax[1]]; renderBnd(); };
+$('#maps').onmouseover = ev => { const r = ev.target.closest('[data-i]'); if (r && B.d) { B.hov = r.dataset.i.split(',').map(Number); bPanel(); } };
+$('#maps').onclick = ev => {
+  const r = ev.target.closest('[data-i]');
+  if (!r || !B.d) return;
+  const h = bcell(r.dataset.i.split(',').map(Number)).h, t = Array(13).fill(0);
+  B.d.cols.forEach((c, a) => t[c] = h[a]);
+  openInEdit({...E.s, tmp: t, wait_for_go: true, dice: null});
+};
+
+changed();
+</script>
+</body>
+</html>
