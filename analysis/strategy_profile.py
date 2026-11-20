@@ -412,8 +412,11 @@ def hit_prob():
     # P(a roll offers column c in some pair)
     return {int(c): float(sum(fr.ROLL_PROB[r] for r in range(fr.N_ROLLS) if c in fr.ROLL_PAIRS[r, :fr.ROLL_NPAIRS[r]])) for c in COLS}
 
-def turns_to_top(c, iters=2000):
-    # expected turns to top column c from 0 playing it alone (all other columns ignored), stopping optimally (value iteration).
+def turns_to_top(c):
+    return float(turns_left(c)[0])
+
+def turns_left(c, iters=2000):
+    # T[h]: expected turns to top column c from height h playing it alone (all other columns ignored), stopping optimally (value iteration).
     # per roll: +2 if some split gives (c, c), else +1 if some pair sums to c, else bust
     p2 = sum(fr.ROLL_PROB[r] for r in range(fr.N_ROLLS) if any(tuple(x) == (c, c) for x in fr.ROLL_PAIRS[r, :fr.ROLL_NPAIRS[r]]))
     p1 = hit_prob()[c] - p2
@@ -429,7 +432,7 @@ def turns_to_top(c, iters=2000):
         if np.abs(new - T).max() < 1e-12:
             break
         T = new
-    return float(T[0])
+    return T[:LEN[c] + 1]
 
 def mean_or_none(x):
     return float(x.mean()) if len(x) else None
