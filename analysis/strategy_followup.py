@@ -353,7 +353,7 @@ def proxy_fit(z):
     for lo_, hi in zip(edges[:-1], edges[1:]):
         m = (r >= lo_) & (r < hi) & late
         if m.sum() >= 100:
-            table.append(dict(lo=lo_, hi=float(hi), mid=float(np.sqrt(max(lo_, 0.15) * min(hi, 6))), n=int(m.sum()), v=float(v[m].mean()), q10=float(np.quantile(v[m], .1)), q90=float(np.quantile(v[m], .9))))
+            table.append(dict(lo=lo_, hi=float(hi) if np.isfinite(hi) else None, mid=float(np.sqrt(max(lo_, 0.15) * min(hi, 6))), n=int(m.sum()), v=float(v[m].mean()), q10=float(np.quantile(v[m], .1)), q90=float(np.quantile(v[m], .9))))
     pred = np.interp(np.log(r), np.log([t['mid'] for t in table]), [t['v'] for t in table])
     res['ratio table'] = dict(rows=table, mae_pts=float(100 * np.abs(pred - v).mean()), mae_pts_turn2plus=float(100 * np.abs(pred - v)[late].mean()))
     res['turns_to_top'] = {int(c): sp.turns_to_top(c) for c in range(2, 13)}
