@@ -41,13 +41,17 @@ def declined_tops(F):
         col = SERIES['S'] if r['rule'] == 'always top' else SERIES['vh'] if '6/7/8' in r['rule'] else SERIES['ens']
         c.plot(r['exact_cost_pts_per_game'], r['agreement'], 'o', color=col, ms=6, zorder=3)
     lab(c, R[0]['exact_cost_pts_per_game'], R[0]['agreement'], 'always top')
-    c.annotate("best: opp count <= 25,\nother pick bust <= 14%", (best['exact_cost_pts_per_game'], best['agreement']), xytext=(0.62, 0.7805),
+    xs, ys = [r['exact_cost_pts_per_game'] for r in R], [r['agreement'] for r in R]
+    x0, x1, y0, y1 = min(xs), max(xs), min(ys), max(ys)
+    short = best['rule'].split(' and ', 1)[1].replace('the other pick leaves P(bust)', 'other pick bust').replace(', unless', ',\nunless')
+    c.annotate(f"best: {best['gate']},\n{short}", (best['exact_cost_pts_per_game'], best['agreement']),
+               xytext=(best['exact_cost_pts_per_game'] + 0.3 * (x1 - x0), best['agreement'] - 0.05 * (y1 - y0)),
                color=INK, fontsize=7.5, va='center', arrowprops=dict(arrowstyle='-', color=MUTED, lw=0.8))
     c.plot([], [], 'o', color=SERIES['ens'], label='other pick bust <= x (exact)')
     c.plot([], [], 'o', color=SERIES['vh'], label='other pick keeps 2 of 6/7/8')
     c.legend(frameon=False, fontsize=7, labelcolor=INK, loc='lower left')
-    c.set_xlim(0.4, 0.9)
-    c.set_ylim(0.705, None)
+    c.set_xlim(x0 - 0.1 * (x1 - x0), x1 + 0.15 * (x1 - x0))
+    c.set_ylim(y0 - 0.35 * (y1 - y0), y1 + 0.1 * (y1 - y0))
     c.yaxis.set_major_formatter(pct)
     c.set_xlabel('exact cost vs the agent (win-probability pts per game)', color=MUTED, fontsize=8)
     c.set_ylabel('agreement with the agent on topping offers', color=MUTED, fontsize=8)
@@ -68,7 +72,7 @@ def bailout_lanes(F):
             for m in range(3):
                 g = G.get(f'opp {o}, me {m}, {s}')
                 if g and g[k] is not None:
-                    M[i, m], N[i, m] = g[k], g['n_top'] if k == 'p_bank_top' else g['n_dec'] - g['n_top']
+                    M[i, m], N[i, m] = g[k], g['n_top'] if k == 'p_bank_top' else g['n_no_top']
         vmax = 1 if k == 'p_bank_top' else np.nanmax(M)
         ax.imshow(M, cmap=SEQ, vmin=0, vmax=vmax, aspect='auto')
         for i in range(len(rows)):
@@ -106,7 +110,7 @@ def race_count(F):
     P = F['proxy']
     f, (a, b) = fig(1, 2, figsize=(11, 4.3), gridspec_kw=dict(width_ratios=[1.3, 1]))
     rows = P['ratio table']['rows']
-    mid = [np.sqrt(max(r['lo'], 0.15) * min(r['hi'], 6)) for r in rows]
+    mid = [r['mid'] for r in rows]
     a.vlines(mid, [r['q10'] for r in rows], [r['q90'] for r in rows], color=SERIES['ens'], lw=2, alpha=0.35, zorder=2)
     a.plot(mid, [r['v'] for r in rows], 'o', color=SERIES['ens'], ms=6, zorder=3, label="agent's V (mean, 10-90% band)")
     q = P['half-turns/step (2,3,4,5,8,14), log ratio']

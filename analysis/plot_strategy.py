@@ -111,7 +111,7 @@ def opening(O):
 
 def bailout(G):
     f, axs = fig(1, 3, figsize=(12, 4.2))
-    panels = ((lambda g: g['bank_vs_threat']['top'], 'threat', 'P(bank) when banking would top a column', 100),
+    panels = ((lambda g: g['bank_vs_threat']['top'], 'threat', 'P(bank) right after a pick that topped a column', 100),
               (lambda g: g['turn_vs_threat']['bank_no_top'], 'threat', 'share of turns ending in a plain bank (no column topped)', 100),
               (lambda g: g['steps_at_bank_vs_v'], 'v', 'steps banked in a plain bank (mean, turn >= 3)', 30))
     for ax, (get, xk, yl, nmin) in zip(axs, panels):

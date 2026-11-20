@@ -8,6 +8,11 @@ from turn_solver import solve_turn
 import strategy_profile as sp
 import strategy_followup as sf
 
+def test_fresh_top():
+    t = np.zeros((4, 13), np.int8)
+    t[0, 2], t[1, 2], t[2, 2], t[3, 2] = 2, 3, 3, 3  # tops on the 2nd decision, still topped on the 3rd; new turn on the 4th
+    assert sp.fresh_top(t, np.array([0, 0, 0, 1])).tolist() == [False, True, False, True]
+
 def test_race_count():
     own, opp = np.zeros(13, np.int8), np.zeros(13, np.int8)
     assert sf.race_count(own, opp) == 26 + 33 + 33  # 7, 6, 8 from empty

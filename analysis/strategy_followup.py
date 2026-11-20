@@ -53,7 +53,7 @@ def _offers(prog, p, rows, best, expand, reach, T, M, u0):
                 w = reach[i] * fr.ROLL_PROB[r]
                 if ps == 0:
                     tot[0] += w
-                    if not _newtop(T, j, i):
+                    if best[j] > best[k]:  # exact value ties count as taken (the top is as good)
                         tot[1] += w
                         tot[2] += w * (best[j] - best[k])
                 else:
@@ -175,7 +175,7 @@ def turn_events(prog, p, V, rng, M=60):
     L_ = np.maximum(L, 0)
     has_l = L >= 0
     rule = np.array([[has_l[e] and sol.stop[K[e]] < 1 and declines(r, x, T, I[e], K[e], L[e], pb, prog[1 - p]) for e in n] for r, x in RULES])
-    return dict(w=np.full(M, tot[0] / M), roll=R, c=c, declined=np.array([not _newtop(T, j, i) for i, j in zip(I, J)]),
+    return dict(w=np.full(M, tot[0] / M), roll=R, c=c, declined=sol.best[J] > sol.best[K],
                 has_alt=has_l, gap=np.where(has_l, sol.best[L_] - sol.best[K], np.nan), v=np.full(M, sol.best[0]),
                 k_bank=act[K], k_win=sol.stop[K] >= 1, l_bank=act[L_], pb_l=np.where(has_l, sol.pbust[L_], np.nan), pb_k=sol.pbust[K],
                 need_i=LEN[c] - hc(I), need_l=LEN[c] - hc(L_), markers_i=(T[I] > 0).sum(1), markers_k=(T[K] > 0).sum(1),
@@ -219,11 +219,17 @@ def pbust_of(prog, p, tmp):
             s += fr.ROLL_PROB[r]
     return s
 
+def wquantile(x, w, q):
+    o = np.argsort(x)
+    cw = np.cumsum(w[o])
+    return x[o][np.searchsorted(cw, q * cw[-1])]
+
 def tops_summary(model):
     E = dict(np.load(os.path.join(CACHE, f'tops_{model}.npz')))
     z = dict(np.load(os.path.join(CACHE, f'selfplay_{model}.npz')))
     tot, t = E['totals'], E['turn_idx']
-    w, d, c = E['w'], E['declined'], E['c']
+    w, c = E['w'], E['c']
+    d = E['declined'] & (np.nan_to_num(E['gap']) > 0)  # ties count as taken (none in the cached runs)
     nw = ~E['k_win'] & E['has_alt']  # a real choice: the top doesn't win and some non-topping pick exists
     J = np.arange(len(z['t_p']))
     co = race_count(z['t_prog'][J, 1 - z['t_p']], z['t_prog'][J, z['t_p']])[t]
@@ -234,7 +240,7 @@ def tops_summary(model):
                declined_per_turn=float(tot[:, 2].mean()), declined_share=float(tot[:, 2].sum() / tot[:, 1].sum()),
                declined_share_real_choice=rate(nw), real_choice_share=share(nw), winning_top_share=share(E['k_win']),
                value_lost_by_topping_pts=float(100 * tot[:, 3].sum() / tot[:, 2].sum()),
-               gap_quantiles_pts={q: float(100 * np.quantile(E['gap'][d & nw], q)) for q in (0.1, 0.5, 0.9)})
+               gap_quantiles_pts={q: float(100 * wquantile(E['gap'][d & nw], w[d & nw], q)) for q in (0.1, 0.5, 0.9)})
     pooled = np.minimum(c, 14 - c)
     groups = dict(column={f'{a}/{14 - a}' if a < 7 else '7': nw & (pooled == a) for a in range(2, 8)},
                   opp_lanes={str(k): nw & (z['t_won_opp'][t] == k) for k in range(3)},
@@ -347,8 +353,8 @@ def proxy_fit(z):
     for lo_, hi in zip(edges[:-1], edges[1:]):
         m = (r >= lo_) & (r < hi) & late
         if m.sum() >= 100:
-            table.append(dict(lo=lo_, hi=float(hi), n=int(m.sum()), v=float(v[m].mean()), q10=float(np.quantile(v[m], .1)), q90=float(np.quantile(v[m], .9))))
-    pred = np.interp(np.log(r), np.log([np.sqrt(max(t['lo'], 0.1) * min(t['hi'], 8)) for t in table]), [t['v'] for t in table])
+            table.append(dict(lo=lo_, hi=float(hi), mid=float(np.sqrt(max(lo_, 0.15) * min(hi, 6))), n=int(m.sum()), v=float(v[m].mean()), q10=float(np.quantile(v[m], .1)), q90=float(np.quantile(v[m], .9))))
+    pred = np.interp(np.log(r), np.log([t['mid'] for t in table]), [t['v'] for t in table])
     res['ratio table'] = dict(rows=table, mae_pts=float(100 * np.abs(pred - v).mean()), mae_pts_turn2plus=float(100 * np.abs(pred - v)[late].mean()))
     res['turns_to_top'] = {int(c): sp.turns_to_top(c) for c in range(2, 13)}
     res['weights_reproduce_order'] = bool((np.argsort(STEP[2:8] * LEN[2:8]) == np.argsort(exact[2:8] * LEN[2:8])).all())
@@ -358,15 +364,18 @@ def bailout_cells(z, min_n=200):
     # go/stop decisions and turns by opponent lanes x own lanes (opponent on 2: by steps left on their closest open column)
     I = np.arange(len(z['d_p']))
     tmp, bank = z['d_tmp'], z['d_bank']
-    top = ((tmp == LEN) & (tmp > 0)).any(1)
+    top = ((tmp == LEN) & (tmp > 0)).any(1)  # any column topped this turn; fresh: the pick just made topped one
+    fresh = sp.fresh_top(tmp, z['d_game'] * 1000 + z['d_turn'])
+    old = top & ~fresh
     co = race_count(z['d_prog'][I, 1 - z['d_p']], z['d_prog'][I, z['d_p']])
     J = np.arange(len(z['t_p']))
     tco = race_count(z['t_prog'][J, 1 - z['t_p']], z['t_prog'][J, z['t_p']])
     out_, steps = z['t_out'], z['t_banked_steps']
     def cell(dm, tm):
-        d = dict(n_dec=int(dm.sum()), n_top=int((dm & top).sum()), n_turns=int(tm.sum()),
-                 p_bank_top=float(bank[dm & top].mean()) if (dm & top).sum() >= 30 else None,
+        d = dict(n_dec=int(dm.sum()), n_top=int((dm & fresh).sum()), n_no_top=int((dm & ~top).sum()), n_turns=int(tm.sum()),
+                 p_bank_top=float(bank[dm & fresh].mean()) if (dm & fresh).sum() >= 30 else None,
                  p_bank_no_top=float(bank[dm & ~top].mean()),
+                 p_bank_topped_earlier=float(bank[dm & old].mean()) if (dm & old).sum() >= 30 else None,
                  steps_banked=float(np.where(out_ == 'bank', steps, 0)[tm].mean()), bust=float((out_[tm] == 'bust').mean()),
                  win=float((out_[tm] == 'win').mean()))
         return d if dm.sum() >= min_n and tm.sum() >= 30 else None
