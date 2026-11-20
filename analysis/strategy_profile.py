@@ -14,7 +14,7 @@ from turn_solver import solve_turn
 # python analysis/strategy_profile.py selfplay --model ens|S|vh --games N ; opening ; games
 OUT = os.path.join(ROOT, 'runs', 'strategy')
 CACHE = os.path.join(OUT, 'cache')
-ARCH = '/home/identity_element/Documents/code_playground/python/cant_stop_archive/'
+ARCH = os.environ.get('CANT_STOP_ARCHIVE', '/home/identity_element/Documents/code_playground/python/cant_stop_archive').rstrip('/') + '/'  # checkpoint root
 MODELS = dict(ens=[ARCH + f'cant_stop_ens/runs/{c}' for c in ('ens_s2/ckpt/it0337.pt', 'ens_s4/ckpt/it0283.pt', 'ens_s5/ckpt/it0284.pt')],
               S=[ARCH + 'cant_stop_scratch/runs/scratch30/ckpt/it0297.pt'], vh='vh')
 COLS = np.arange(2, 13)
@@ -119,7 +119,9 @@ def feats(sol, tp):
                 pbust=np.nan_to_num(sol.pbust), outer=on[:, [2, 3, 11, 12]].sum(1), on7=on[:, 7].astype(int))
 
 def rule_value(sol, force):
-    return float(_forced(sol.child, sol.stop, sol.bust_val, sol.order, force.astype(np.int8))[0])
+    force = force.astype(np.int8)
+    force[0] = 2  # the empty turn start can't bank
+    return float(_forced(sol.child, sol.stop, sol.bust_val, sol.order, force)[0])
 
 def summarize_turn(sol, tp):
     f = feats(sol, tp)
@@ -140,7 +142,7 @@ def summarize_turn(sol, tp):
     # P(bank) at decisions, by markers x steps (reach-weighted)
     tab = {}
     for m in (1, 2, 3):
-        for s in range(1, 25):
+        for s in range(1, int(f['steps'][dec].max()) + 1):
             k = dec & (f['markers'] == m) & (f['steps'] == s)
             if reach[k].sum() > 1e-6:
                 tab[f'{m},{s}'] = [float(reach[k].sum()), float(stopm[k].sum() / reach[k].sum())]
@@ -249,7 +251,9 @@ def tree_rule(sol, tp, depth):
     dec, reach = tp['dec'], tp['reach']
     clf = DecisionTreeClassifier(max_depth=depth, min_weight_fraction_leaf=0.002, random_state=0)
     clf.fit(X[dec], tp['act_stop'][dec], sample_weight=reach[dec])
-    return export_text(clf, feature_names=list(f), decimals=3), clf.predict(X).astype(bool)  # the rule acts on every row
+    pred = clf.predict(X).astype(bool)  # the rule acts on every row
+    pred[0] = False  # the empty turn start can't bank
+    return export_text(clf, feature_names=list(f), decimals=3), pred
 
 def rule_report(sol, tp, pred):
     # agreement: reach-weighted over the policy's decisions; myopic cost: reach x |go - stop| summed over disagreements;
@@ -327,7 +331,9 @@ def opening_for(V, prog, p, trees=True):
     f, dec, reach = feats(sol, tp), tp['dec'], tp['reach']
     k = dec & (f['topped'] > 0)
     out['p_bank_given_topped'] = float(tp['stopm'][k].sum() / max(reach[k].sum(), 1e-12))
-    out['p_bank_not_topped'] = float(tp['stopm'][dec & (f['topped'] == 0)].sum())
+    k = dec & (f['topped'] == 0)
+    out['p_bank_not_topped'] = float(tp['stopm'][k].sum() / max(reach[k].sum(), 1e-12))  # per decision, like the above
+    out['p_turn_plain_bank'] = float(tp['stopm'][k].sum())  # share of turns ending in a bank with nothing topped
     rb = np.round(f['rel_steps'] / 0.25) * 0.25
     out['bank_by_rel'] = {nm: [dict(x=float(x), reach=float(reach[k & (rb == x)].sum()),
                                     p_bank=float(tp['stopm'][k & (rb == x)].sum() / reach[k & (rb == x)].sum()))
@@ -425,6 +431,9 @@ def turns_to_top(c, iters=2000):
         T = new
     return float(T[0])
 
+def mean_or_none(x):
+    return float(x.mean()) if len(x) else None
+
 def rate_table(x, y, bins):
     idx = np.digitize(x, bins) - 1
     return [dict(lo=float(bins[b]), hi=float(bins[b + 1]), n=int((idx == b).sum()), rate=float(y[idx == b].mean()) if (idx == b).any() else None)
@@ -449,13 +458,15 @@ def games_summary(model):
             order.setdefault(int(z['c_col'][i]), []).append(rank + 1)
         if len(k):
             firsts[int(z['c_col'][k[0]])] += 1
-    wins3 = Counter(tuple(int(c) for c in COLS if z['g_final'][g, z['g_winner'][g], c] == LEN[c]) for g in range(G))
+    wins = Counter(tuple(int(c) for c in COLS if z['g_final'][g, z['g_winner'][g], c] == LEN[c]) for g in range(G))
+    wins3 = Counter({k: v for k, v in wins.items() if len(k) == 3})
     out = dict(model=model, games=G, first_player_win=float((z['g_winner'] == 0).mean()), mean_turns=float(z['g_turns'].mean()),
                hit_prob=hp, rolls_to_top={int(c): float(v) for c, v in cost.items()}, turns_to_top=tt,
                claim_any=claim_any, claim_winner=claim_win, claim_norm=norm,
                mean_claim_rank={c: float(np.mean(v)) for c, v in sorted(order.items())},
                first_claimed={int(c): firsts[c] / G for c in COLS},
-               top_win_sets=[[list(k), v / G] for k, v in wins3.most_common(12)])
+               top_win_sets=[[list(k), v / G] for k, v in wins3.most_common(12)],
+               win_with_4_columns=sum(v for k, v in wins.items() if len(k) > 3) / G)
     # mirror-pooled
     out['claim_any_pooled'] = {f'{c}/{14 - c}' if c != 7 else '7': (claim_any[c] + claim_any[14 - c]) / 2 for c in range(2, 8)}
     out['claim_norm_pooled'] = {f'{c}/{14 - c}' if c != 7 else '7': (norm[c] + norm[14 - c]) / 2 for c in range(2, 8)}
@@ -466,7 +477,7 @@ def games_summary(model):
     for ph, (lo, hi) in phases.items():
         m = (turn >= lo) & (turn <= hi) & avail.any(1)
         st[ph] = dict(n=int(m.sum()), share={int(c): float(first[m, i].mean()) for i, c in enumerate(COLS)},
-                      take_if_offered={int(c): float(first[m, i][avail[m, i]].mean()) for i, c in enumerate(COLS)})
+                      take_if_offered={int(c): mean_or_none(first[m, i][avail[m, i]]) for i, c in enumerate(COLS)})
     # continuing vs fresh: does the first pick go on a column where the mover already has progress?
     tp, p = z['t_prog'], z['t_p']
     own = tp[np.arange(len(p)), p][:, 2:] > 0
@@ -486,8 +497,8 @@ def games_summary(model):
     late = bank & ~top & (z['d_turn'] >= 2)  # turns 0-1 (deep opening banks) excluded; "rate" = mean steps banked
     out['steps_at_bank_vs_v'] = rate_table(v[late], steps[late], vb)
     out['steps_at_bank_vs_threat'] = rate_table(thr[bank & ~top], steps[bank & ~top], tb)
-    out['bank_by_score'] = [dict(won_me=i, won_opp=j, n=int(m.sum()), bank=float(bank[m].mean()), bank_no_top=float(bank[m & ~top].mean()),
-                                 bank_if_top=float(bank[m & top].mean()) if (m & top).any() else None, n_top=int((m & top).sum()))
+    out['bank_by_score'] = [dict(won_me=i, won_opp=j, n=int(m.sum()), bank=mean_or_none(bank[m]), bank_no_top=mean_or_none(bank[m & ~top]),
+                                 bank_if_top=mean_or_none(bank[m & top]), n_top=int((m & top).sum()))
                             for i in range(3) for j in range(3) for m in [(z['d_won_me'] == i) & (z['d_won_opp'] == j)] if m.any()]
     vb2, tb2 = np.array([0, .2, .35, .5, .65, .8, 1]), np.array([0, .05, .15, .3, .5, 1.0001])
     cell = (np.digitize(v, vb2) - 1) * 10 + np.digitize(thr, tb2) - 1
@@ -524,4 +535,6 @@ if __name__ == '__main__':
         res = json.load(open(f)) if os.path.exists(f) else {}
         json.dump(res | opening(a.model), open(f, 'w'), indent=1)
     else:
-        json.dump({m: games_summary(m) for m in a.model}, open(os.path.join(OUT, 'games.json'), 'w'), indent=1)
+        f = os.path.join(OUT, 'games.json')
+        res = json.load(open(f)) if os.path.exists(f) else {}
+        json.dump(res | {m: games_summary(m) for m in a.model}, open(f, 'w'), indent=1)

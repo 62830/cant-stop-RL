@@ -38,7 +38,8 @@ def lab(ax, x, y, s, color=INK, **k):
 
 def claims(G):
     f, (a, b) = fig(1, 2, figsize=(11, 4.2))
-    e, x, w = G['ens'], np.arange(11), 0.38
+    ms = [m for m in SERIES if m in G]
+    e, x, w = G[ms[0]], np.arange(11), 0.38
     any_, win = [e['claim_any'][str(c)] for c in COLS], [e['claim_winner'][str(c)] for c in COLS]
     a.bar(x - w / 2 - 0.01, any_, w, color=SERIES['ens'], label='claimed by anyone', zorder=3)
     a.bar(x + w / 2 + 0.01, win, w, color=SERIES['S'], label='claimed by the winner', zorder=3)
@@ -50,18 +51,17 @@ def claims(G):
     a.set_ylabel('share of games', color=MUTED, fontsize=8)
     a.yaxis.set_major_formatter(matplotlib.ticker.PercentFormatter(1))
     a.legend(frameon=False, fontsize=7.5, labelcolor=INK, loc='upper left')
-    head(a, 'Raw claim rate per column (ensemble self-play)')
-    for m in ('ens', 'S', 'vh'):
-        if m in G:
-            y = [G[m]['claim_norm'][str(c)] for c in COLS]
-            b.plot(x, y, '-o', color=SERIES[m], lw=2, ms=5, zorder=3, label=LABEL[m])
+    head(a, f'Raw claim rate per column ({LABEL[ms[0]]} self-play)')
+    for m in ms:
+        y = [G[m]['claim_norm'][str(c)] for c in COLS]
+        b.plot(x, y, '-o', color=SERIES[m], lw=2, ms=5, zorder=3, label=LABEL[m])
     b.axhline(1, color=MUTED, lw=1, ls='--', zorder=2)
     b.set_xticks(x, COLS)
     b.set_xlabel('column', color=MUTED, fontsize=8)
     b.set_ylabel('claim rate x turns-to-top alone (mean = 1)', color=MUTED, fontsize=8)
     b.legend(frameon=False, fontsize=7.5, labelcolor=INK, loc='upper left')
     head(b, 'Adjusted for difficulty: exact turns to top the column alone')
-    title(f, 'Which columns get topped', f"self-play: ensemble {G['ens']['games']}, S {G['S']['games']}, V_h {G['vh']['games']} games; right: >1 = claimed more often than its difficulty (length and roll odds) predicts")
+    title(f, 'Which columns get topped', 'self-play: ' + ', '.join(f"{LABEL[m]} {G[m]['games']}" for m in ms) + ' games; right: >1 = claimed more often than its difficulty (length and roll odds) predicts')
     f.subplots_adjust(top=0.8, bottom=0.17, wspace=0.25, left=0.06, right=0.97)
     f.savefig(os.path.join(D, 'claims.png'))
 
