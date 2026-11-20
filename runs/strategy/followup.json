@@ -1,0 +1,1927 @@
+{
+ "proxy": {
+  "exact turns/step, log ratio": {
+   "a": 0.2891711040765975,
+   "b": 1.3914464898408034,
+   "mae_pts": 2.8003589168493224,
+   "mae_pts_turn2plus": 2.8420169586454445,
+   "spearman": 0.9865905710574322
+  },
+  "exact turns/step, difference": {
+   "a": 0.29069312092420324,
+   "b": 0.05732506038463025,
+   "mae_pts": 4.708530224891532,
+   "mae_pts_turn2plus": 5.017988924184852,
+   "spearman": 0.9776913637858026
+  },
+  "half-turns/step (2,3,4,5,8,14), log ratio": {
+   "a": 0.2890550653778199,
+   "b": 1.3473723038085055,
+   "mae_pts": 2.8415147042112827,
+   "mae_pts_turn2plus": 2.8981949673254856,
+   "spearman": 0.9865783019723435
+  },
+  "half-turns/step (2,3,4,5,8,14), difference": {
+   "a": 0.29054924173173297,
+   "b": 0.029394835387482894,
+   "mae_pts": 4.966196887679662,
+   "mae_pts_turn2plus": 5.313221019322078,
+   "spearman": 0.9764122744492552
+  },
+  "unweighted steps, log ratio": {
+   "a": 0.2688284752090587,
+   "b": 2.1022695692134876,
+   "mae_pts": 5.3752605637259245,
+   "mae_pts_turn2plus": 5.944269654856996,
+   "spearman": 0.9530835034460137
+  },
+  "unweighted steps, difference": {
+   "a": 0.2740639896417266,
+   "b": 0.2845590190438081,
+   "mae_pts": 5.786860931362844,
+   "mae_pts_turn2plus": 6.438685821466115,
+   "spearman": 0.951615336798649
+  },
+  "lanes topped (3x3 table of mean V)": {
+   "mae_pts": 6.6612116376310455,
+   "mae_pts_turn2plus": 7.783624980778435,
+   "spearman": 0.9064543510767367
+  },
+  "ratio table": {
+   "rows": [
+    {
+     "lo": 0,
+     "hi": 0.25,
+     "mid": 0.19364916731037085,
+     "n": 6204,
+     "v": 0.11191872525888236,
+     "q10": 0.04484224918900718,
+     "q90": 0.19181379729500886
+    },
+    {
+     "lo": 0.25,
+     "hi": 0.4,
+     "mid": 0.31622776601683794,
+     "n": 4316,
+     "v": 0.23627846861913002,
+     "q10": 0.16477542111214186,
+     "q90": 0.30799072081333506
+    },
+    {
+     "lo": 0.4,
+     "hi": 0.5,
+     "mid": 0.4472135954999579,
+     "n": 2666,
+     "v": 0.316892414575002,
+     "q10": 0.2695346963495482,
+     "q90": 0.3775072293618491
+    },
+    {
+     "lo": 0.5,
+     "hi": 0.67,
+     "mid": 0.5787918451395113,
+     "n": 3149,
+     "v": 0.3920908574939687,
+     "q10": 0.33265204855608976,
+     "q90": 0.4668320826332781
+    },
+    {
+     "lo": 0.67,
+     "hi": 0.8,
+     "mid": 0.7321202087089251,
+     "n": 1317,
+     "v": 0.47010140379088555,
+     "q10": 0.4168977739746051,
+     "q90": 0.5417874686213207
+    },
+    {
+     "lo": 0.8,
+     "hi": 0.9,
+     "mid": 0.8485281374238571,
+     "n": 799,
+     "v": 0.5260146064426159,
+     "q10": 0.46410095735398305,
+     "q90": 0.6043409705047024
+    },
+    {
+     "lo": 0.9,
+     "hi": 1.11,
+     "mid": 0.999499874937461,
+     "n": 6649,
+     "v": 0.5512094147509801,
+     "q10": 0.5439754524978546,
+     "q90": 0.569475595787349
+    },
+    {
+     "lo": 1.11,
+     "hi": 1.25,
+     "mid": 1.1779218989389748,
+     "n": 623,
+     "v": 0.6333633889652501,
+     "q10": 0.5868641055098018,
+     "q90": 0.7086440090545799
+    },
+    {
+     "lo": 1.25,
+     "hi": 1.5,
+     "mid": 1.3693063937629153,
+     "n": 1226,
+     "v": 0.6720895775685914,
+     "q10": 0.6236993817216012,
+     "q90": 0.7310344061692179
+    },
+    {
+     "lo": 1.5,
+     "hi": 2.0,
+     "mid": 1.7320508075688772,
+     "n": 2385,
+     "v": 0.735874385850121,
+     "q10": 0.6907085717953995,
+     "q90": 0.7807074354345094
+    },
+    {
+     "lo": 2,
+     "hi": 2.5,
+     "mid": 2.23606797749979,
+     "n": 2536,
+     "v": 0.7943549716722985,
+     "q10": 0.7572223346721392,
+     "q90": 0.8323073001501414
+    },
+    {
+     "lo": 2.5,
+     "hi": 4.0,
+     "mid": 3.1622776601683795,
+     "n": 3743,
+     "v": 0.8662424184848301,
+     "q10": 0.8205133117905822,
+     "q90": 0.9145749056387221
+    },
+    {
+     "lo": 4,
+     "hi": null,
+     "mid": 4.898979485566356,
+     "n": 5339,
+     "v": 0.9558718808909081,
+     "q10": 0.9099970918380098,
+     "q90": 0.9913784452707748
+    }
+   ],
+   "mae_pts": 2.479788892159674,
+   "mae_pts_turn2plus": 2.8450422473602273
+  },
+  "turns_to_top": {
+   "2": 22.648458635038068,
+   "3": 21.120931017284306,
+   "4": 19.006875000018944,
+   "5": 19.058019902175204,
+   "6": 16.099938170772457,
+   "7": 14.268802319999562,
+   "8": 16.099938170772457,
+   "9": 19.058019902175207,
+   "10": 19.006875000018944,
+   "11": 21.120931017284324,
+   "12": 22.648458635038043
+  },
+  "weights_reproduce_order": true
+ },
+ "bailout": {
+  "grid": {
+   "opp 0, me 0, all": {
+    "opp": 0,
+    "me": 0,
+    "split": "all",
+    "n_dec": 141230,
+    "n_top": 5145,
+    "n_no_top": 135908,
+    "n_turns": 18509,
+    "p_bank_top": 0.9510204081632653,
+    "p_bank_no_top": 0.014598110486505578,
+    "p_bank_topped_earlier": 0.5932203389830508,
+    "steps_banked": 5.674320600788805,
+    "bust": 0.6226700524069372,
+    "win": 0.00010805554054784159
+   },
+   "opp 0, me 1, all": {
+    "opp": 0,
+    "me": 1,
+    "split": "all",
+    "n_dec": 30239,
+    "n_top": 2890,
+    "n_no_top": 26836,
+    "n_turns": 5454,
+    "p_bank_top": 0.8238754325259515,
+    "p_bank_no_top": 0.016544939633328364,
+    "p_bank_topped_earlier": 0.6471734892787524,
+    "steps_banked": 5.206087275394206,
+    "bust": 0.3923725705903924,
+    "win": 0.028786211954528785
+   },
+   "opp 0, me 2, all": {
+    "opp": 0,
+    "me": 2,
+    "split": "all",
+    "n_dec": 14266,
+    "n_top": 0,
+    "n_no_top": 14266,
+    "n_turns": 3550,
+    "p_bank_top": null,
+    "p_bank_no_top": 0.02754801626244217,
+    "p_bank_topped_earlier": null,
+    "steps_banked": 0.6591549295774648,
+    "bust": 0.2991549295774648,
+    "win": 0.5901408450704225
+   },
+   "opp 1, me 0, all": {
+    "opp": 1,
+    "me": 0,
+    "split": "all",
+    "n_dec": 61595,
+    "n_top": 2267,
+    "n_no_top": 59084,
+    "n_turns": 7435,
+    "p_bank_top": 0.8606087340097045,
+    "p_bank_no_top": 0.0026064586013133844,
+    "p_bank_topped_earlier": 0.10655737704918032,
+    "steps_banked": 4.878950907868191,
+    "bust": 0.7128446536650975,
+    "win": 0.0005379959650302623
+   },
+   "opp 1, me 1, all": {
+    "opp": 1,
+    "me": 1,
+    "split": "all",
+    "n_dec": 24136,
+    "n_top": 1802,
+    "n_no_top": 21895,
+    "n_turns": 3912,
+    "p_bank_top": 0.753607103218646,
+    "p_bank_no_top": 0.007307604475907742,
+    "p_bank_topped_earlier": 0.4533029612756264,
+    "steps_banked": 4.342791411042945,
+    "bust": 0.5115030674846626,
+    "win": 0.04959100204498978
+   },
+   "opp 1, me 2, all": {
+    "opp": 1,
+    "me": 2,
+    "split": "all",
+    "n_dec": 11856,
+    "n_top": 0,
+    "n_no_top": 11856,
+    "n_turns": 2704,
+    "p_bank_top": null,
+    "p_bank_no_top": 0.018977732793522266,
+    "p_bank_topped_earlier": null,
+    "steps_banked": 0.4988905325443787,
+    "bust": 0.40162721893491127,
+    "win": 0.5151627218934911
+   },
+   "opp 2, me 0, all": {
+    "opp": 2,
+    "me": 0,
+    "split": "all",
+    "n_dec": 35931,
+    "n_top": 1153,
+    "n_no_top": 34315,
+    "n_turns": 4315,
+    "p_bank_top": 0.6131830008673027,
+    "p_bank_no_top": 0.0008159696925542766,
+    "p_bank_topped_earlier": 0.04103671706263499,
+    "steps_banked": 2.971263035921205,
+    "bust": 0.8162224797219003,
+    "win": 0.009038238702201622
+   },
+   "opp 2, me 0, 1-1 steps to 3rd": {
+    "opp": 2,
+    "me": 0,
+    "split": "1-1 steps to 3rd",
+    "n_dec": 7300,
+    "n_top": 232,
+    "n_no_top": 6916,
+    "n_turns": 861,
+    "p_bank_top": 0.41810344827586204,
+    "p_bank_no_top": 0.00014459224985540774,
+    "p_bank_topped_earlier": 0.02631578947368421,
+    "steps_banked": 1.9500580720092915,
+    "bust": 0.8606271777003485,
+    "win": 0.020905923344947737
+   },
+   "opp 2, me 0, 2-2 steps to 3rd": {
+    "opp": 2,
+    "me": 0,
+    "split": "2-2 steps to 3rd",
+    "n_dec": 10898,
+    "n_top": 350,
+    "n_no_top": 10409,
+    "n_turns": 1345,
+    "p_bank_top": 0.6285714285714286,
+    "p_bank_no_top": 0.0006724949562878278,
+    "p_bank_topped_earlier": 0.07194244604316546,
+    "steps_banked": 2.8669144981412638,
+    "bust": 0.8178438661710037,
+    "win": 0.005947955390334572
+   },
+   "opp 2, me 0, 3-3 steps to 3rd": {
+    "opp": 2,
+    "me": 0,
+    "split": "3-3 steps to 3rd",
+    "n_dec": 17339,
+    "n_top": 558,
+    "n_no_top": 16611,
+    "n_turns": 2071,
+    "p_bank_top": 0.6899641577060932,
+    "p_bank_no_top": 0.0012040214315814821,
+    "p_bank_topped_earlier": 0.029411764705882353,
+    "steps_banked": 3.467889908256881,
+    "bust": 0.7957508450024143,
+    "win": 0.006277160791887977
+   },
+   "opp 2, me 0, 4-99 steps to 3rd": {
+    "opp": 2,
+    "me": 0,
+    "split": "4-99 steps to 3rd",
+    "n_dec": 394,
+    "n_top": 13,
+    "n_no_top": 379,
+    "n_turns": 38,
+    "p_bank_top": null,
+    "p_bank_no_top": 0.0,
+    "p_bank_topped_earlier": null,
+    "steps_banked": 2.736842105263158,
+    "bust": 0.868421052631579,
+    "win": 0.0
+   },
+   "opp 2, me 1, all": {
+    "opp": 2,
+    "me": 1,
+    "split": "all",
+    "n_dec": 19508,
+    "n_top": 1193,
+    "n_no_top": 17552,
+    "n_turns": 3094,
+    "p_bank_top": 0.47611064543168485,
+    "p_bank_no_top": 0.004842752962625342,
+    "p_bank_topped_earlier": 0.16120576671035386,
+    "steps_banked": 2.237879767291532,
+    "bust": 0.6616031027795733,
+    "win": 0.08758888170652876
+   },
+   "opp 2, me 1, 1-1 steps to 3rd": {
+    "opp": 2,
+    "me": 1,
+    "split": "1-1 steps to 3rd",
+    "n_dec": 3187,
+    "n_top": 186,
+    "n_no_top": 2818,
+    "n_turns": 512,
+    "p_bank_top": 0.3172043010752688,
+    "p_bank_no_top": 0.00035486160397445,
+    "p_bank_topped_earlier": 0.07650273224043716,
+    "steps_banked": 1.240234375,
+    "bust": 0.7578125,
+    "win": 0.09765625
+   },
+   "opp 2, me 1, 2-2 steps to 3rd": {
+    "opp": 2,
+    "me": 1,
+    "split": "2-2 steps to 3rd",
+    "n_dec": 5516,
+    "n_top": 365,
+    "n_no_top": 4904,
+    "n_turns": 889,
+    "p_bank_top": 0.46301369863013697,
+    "p_bank_no_top": 0.004690048939641109,
+    "p_bank_topped_earlier": 0.1862348178137652,
+    "steps_banked": 2.253093363329584,
+    "bust": 0.6434195725534309,
+    "win": 0.08886389201349831
+   },
+   "opp 2, me 1, 3-3 steps to 3rd": {
+    "opp": 2,
+    "me": 1,
+    "split": "3-3 steps to 3rd",
+    "n_dec": 9979,
+    "n_top": 605,
+    "n_no_top": 9065,
+    "n_turns": 1590,
+    "p_bank_top": 0.5371900826446281,
+    "p_bank_no_top": 0.006508549365692223,
+    "p_bank_topped_earlier": 0.20064724919093851,
+    "steps_banked": 2.5352201257861635,
+    "bust": 0.6371069182389937,
+    "win": 0.08238993710691823
+   },
+   "opp 2, me 1, 4-99 steps to 3rd": {
+    "opp": 2,
+    "me": 1,
+    "split": "4-99 steps to 3rd",
+    "n_dec": 826,
+    "n_top": 37,
+    "n_no_top": 765,
+    "n_turns": 103,
+    "p_bank_top": 0.40540540540540543,
+    "p_bank_no_top": 0.00261437908496732,
+    "p_bank_topped_earlier": null,
+    "steps_banked": 2.4757281553398056,
+    "bust": 0.7184466019417476,
+    "win": 0.10679611650485436
+   },
+   "opp 2, me 2, all": {
+    "opp": 2,
+    "me": 2,
+    "split": "all",
+    "n_dec": 8856,
+    "n_top": 0,
+    "n_no_top": 8856,
+    "n_turns": 1979,
+    "p_bank_top": null,
+    "p_bank_no_top": 0.004968383017163505,
+    "p_bank_topped_earlier": null,
+    "steps_banked": 0.10965133906013137,
+    "bust": 0.5507832238504295,
+    "win": 0.4269833249115715
+   },
+   "opp 2, me 2, 1-1 steps to 3rd": {
+    "opp": 2,
+    "me": 2,
+    "split": "1-1 steps to 3rd",
+    "n_dec": 1230,
+    "n_top": 0,
+    "n_no_top": 1230,
+    "n_turns": 276,
+    "p_bank_top": null,
+    "p_bank_no_top": 0.0,
+    "p_bank_topped_earlier": null,
+    "steps_banked": 0.0,
+    "bust": 0.6521739130434783,
+    "win": 0.34782608695652173
+   },
+   "opp 2, me 2, 2-2 steps to 3rd": {
+    "opp": 2,
+    "me": 2,
+    "split": "2-2 steps to 3rd",
+    "n_dec": 2767,
+    "n_top": 0,
+    "n_no_top": 2767,
+    "n_turns": 610,
+    "p_bank_top": null,
+    "p_bank_no_top": 0.006505240332490061,
+    "p_bank_topped_earlier": null,
+    "steps_banked": 0.14098360655737704,
+    "bust": 0.5426229508196722,
+    "win": 0.4278688524590164
+   },
+   "opp 2, me 2, 3-3 steps to 3rd": {
+    "opp": 2,
+    "me": 2,
+    "split": "3-3 steps to 3rd",
+    "n_dec": 4512,
+    "n_top": 0,
+    "n_no_top": 4512,
+    "n_turns": 1028,
+    "p_bank_top": null,
+    "p_bank_no_top": 0.00576241134751773,
+    "p_bank_topped_earlier": null,
+    "steps_banked": 0.12743190661478598,
+    "bust": 0.5330739299610895,
+    "win": 0.44163424124513617
+   },
+   "opp 2, me 2, 4-99 steps to 3rd": {
+    "opp": 2,
+    "me": 2,
+    "split": "4-99 steps to 3rd",
+    "n_dec": 347,
+    "n_top": 0,
+    "n_no_top": 347,
+    "n_turns": 65,
+    "p_bank_top": null,
+    "p_bank_no_top": 0.0,
+    "p_bank_topped_earlier": null,
+    "steps_banked": 0.0,
+    "bust": 0.47692307692307695,
+    "win": 0.5230769230769231
+   }
+  },
+  "by_opp_count": [
+   {
+    "lo": 0,
+    "hi": 10,
+    "threat": 0.790603693952073,
+    "n_dec": 16806,
+    "n_top": 540,
+    "n_no_top": 15804,
+    "n_turns": 2235,
+    "p_bank_top": 0.3907407407407407,
+    "p_bank_no_top": 0.00037965072133637056,
+    "p_bank_topped_earlier": 0.03896103896103896,
+    "steps_banked": 1.6805369127516778,
+    "bust": 0.8272930648769575,
+    "win": 0.06756152125279642
+   },
+   {
+    "lo": 10,
+    "hi": 15,
+    "threat": 0.5970295641338496,
+    "n_dec": 22954,
+    "n_top": 791,
+    "n_no_top": 21774,
+    "n_turns": 3169,
+    "p_bank_top": 0.5372945638432364,
+    "p_bank_no_top": 0.0007348213465601176,
+    "p_bank_topped_earlier": 0.08483290488431877,
+    "steps_banked": 2.109813821394762,
+    "bust": 0.7548122436099716,
+    "win": 0.09561375828337015
+   },
+   {
+    "lo": 15,
+    "hi": 20,
+    "threat": 0.4503282394991159,
+    "n_dec": 19218,
+    "n_top": 738,
+    "n_no_top": 18197,
+    "n_turns": 2648,
+    "p_bank_top": 0.6246612466124661,
+    "p_bank_no_top": 0.0020333021926691214,
+    "p_bank_topped_earlier": 0.10600706713780919,
+    "steps_banked": 2.7820996978851964,
+    "bust": 0.7043051359516617,
+    "win": 0.09629909365558913
+   },
+   {
+    "lo": 20,
+    "hi": 25,
+    "threat": 0.3198539206224038,
+    "n_dec": 21016,
+    "n_top": 863,
+    "n_no_top": 19962,
+    "n_turns": 3046,
+    "p_bank_top": 0.7601390498261877,
+    "p_bank_no_top": 0.0043582807333934475,
+    "p_bank_topped_earlier": 0.2513089005235602,
+    "steps_banked": 3.3430728824688116,
+    "bust": 0.6349310571240971,
+    "win": 0.10538411030860144
+   },
+   {
+    "lo": 25,
+    "hi": 30,
+    "threat": 0.24576697605671252,
+    "n_dec": 17082,
+    "n_top": 695,
+    "n_no_top": 16242,
+    "n_turns": 2502,
+    "p_bank_top": 0.7654676258992805,
+    "p_bank_no_top": 0.005294914419406477,
+    "p_bank_topped_earlier": 0.4689655172413793,
+    "steps_banked": 3.6430855315747404,
+    "bust": 0.6127098321342925,
+    "win": 0.11310951239008793
+   },
+   {
+    "lo": 30,
+    "hi": 40,
+    "threat": 0.18707103612330206,
+    "n_dec": 34771,
+    "n_top": 1410,
+    "n_no_top": 33157,
+    "n_turns": 4855,
+    "p_bank_top": 0.8354609929078014,
+    "p_bank_no_top": 0.005760472901649727,
+    "p_bank_topped_earlier": 0.3382352941176471,
+    "steps_banked": 4.168074150360453,
+    "bust": 0.6181256436663234,
+    "win": 0.08568486096807415
+   },
+   {
+    "lo": 40,
+    "hi": 60,
+    "threat": 0.1251486725173113,
+    "n_dec": 46171,
+    "n_top": 2044,
+    "n_no_top": 43837,
+    "n_turns": 6813,
+    "p_bank_top": 0.8380626223091977,
+    "p_bank_no_top": 0.006410110180897415,
+    "p_bank_topped_earlier": 0.4,
+    "steps_banked": 4.10259797446059,
+    "bust": 0.5599589020989285,
+    "win": 0.13033905768383972
+   },
+   {
+    "lo": 60,
+    "hi": 90,
+    "threat": 0.04954181783174578,
+    "n_dec": 14003,
+    "n_top": 610,
+    "n_no_top": 13329,
+    "n_turns": 2357,
+    "p_bank_top": 0.8950819672131147,
+    "p_bank_no_top": 0.014329657138570035,
+    "p_bank_topped_earlier": 0.609375,
+    "steps_banked": 3.7963512940178195,
+    "bust": 0.49257530759439966,
+    "win": 0.17819261773440814
+   },
+   {
+    "lo": 90,
+    "hi": 999,
+    "threat": 0.04176142768451784,
+    "n_dec": 155596,
+    "n_top": 6759,
+    "n_no_top": 148266,
+    "n_turns": 23327,
+    "p_bank_top": 0.9078266015682793,
+    "p_bank_no_top": 0.017684432034316702,
+    "p_bank_topped_earlier": 0.670753064798599,
+    "steps_banked": 4.976765121961676,
+    "bust": 0.5239850816650233,
+    "win": 0.08415141252625713
+   }
+  ]
+ },
+ "tops": {
+  "model": "ens",
+  "turns": 8000,
+  "sampled_offers": 480000,
+  "offers_per_turn": 0.43105428804120854,
+  "declined_per_turn": 0.05173482681690625,
+  "declined_share": 0.12001928353850508,
+  "declined_share_real_choice": 0.2719964548593469,
+  "real_choice_share": 0.4428761397653928,
+  "winning_top_share": 0.219491198226656,
+  "value_lost_by_topping_pts": 3.500848249394157,
+  "gap_quantiles_pts": {
+   "0.1": 0.24443447490364312,
+   "0.5": 2.0456162693304414,
+   "0.9": 8.906138145081133
+  },
+  "decline_rate_by": {
+   "column": {
+    "2/12": {
+     "share": 0.04998756005164118,
+     "declined": 0.10647915567979173
+    },
+    "3/11": {
+     "share": 0.013801597113105381,
+     "declined": 0.18356988767809682
+    },
+    "4/10": {
+     "share": 0.08283716992825972,
+     "declined": 0.2516803086054982
+    },
+    "5/9": {
+     "share": 0.03535032294156995,
+     "declined": 0.4528997459317444
+    },
+    "6/8": {
+     "share": 0.1830854389094508,
+     "declined": 0.27303593797865355
+    },
+    "7": {
+     "share": 0.0778140508213658,
+     "declined": 0.3310071581187554
+    }
+   },
+   "opp_lanes": {
+    "0": {
+     "share": 0.23874786707693255,
+     "declined": 0.14604048765746558
+    },
+    "1": {
+     "share": 0.12582393074340567,
+     "declined": 0.3302620070306274
+    },
+    "2": {
+     "share": 0.07830434194505459,
+     "declined": 0.5624084186032293
+    }
+   },
+   "own_lanes": {
+    "0": {
+     "share": 0.23799808533792155,
+     "declined": 0.2689731115887309
+    },
+    "1": {
+     "share": 0.20487805442747128,
+     "declined": 0.2755085436076351
+    }
+   },
+   "opp_count": {
+    "0-15": {
+     "share": 0.045532481991447125,
+     "declined": 0.6123910523921658
+    },
+    "15-30": {
+     "share": 0.07247467816162616,
+     "declined": 0.44533544847241074
+    },
+    "30-60": {
+     "share": 0.10555199143814248,
+     "declined": 0.2795495585982178
+    },
+    "60-90": {
+     "share": 0.01865963807490229,
+     "declined": 0.16806119263444602
+    },
+    "90-999": {
+     "share": 0.20065735009927482,
+     "declined": 0.1378396477020833
+    }
+   },
+   "threat": {
+    "0-0.05": {
+     "share": 0.21389284222973115,
+     "declined": 0.13922908330211553
+    },
+    "0.05-0.15": {
+     "share": 0.05048182340560769,
+     "declined": 0.2265356328169701
+    },
+    "0.15-0.3": {
+     "share": 0.08985852443862534,
+     "declined": 0.3294875739019031
+    },
+    "0.3-0.5": {
+     "share": 0.0403443322334518,
+     "declined": 0.4807548930015168
+    },
+    "0.5-1.01": {
+     "share": 0.04829861745797687,
+     "declined": 0.6261401061225033
+    }
+   },
+   "would_bank_after_topping": {
+    "yes": {
+     "share": 0.3455390412406505,
+     "declined": 0.22842756782785223
+    },
+    "no": {
+     "share": 0.09733709852474236,
+     "declined": 0.4266625758035424
+    }
+   },
+   "markers_after_topping": {
+    "1": {
+     "share": 0.009741259107490801,
+     "declined": 0.16871164852240814
+    },
+    "2": {
+     "share": 0.03898918362057201,
+     "declined": 0.20488219435517452
+    },
+    "3": {
+     "share": 0.3941456970373301,
+     "declined": 0.2811881175211064
+    }
+   },
+   "steps_to_top_before_roll": {
+    "1": {
+     "share": 0.4043418569174926,
+     "declined": 0.2789980869061414
+    },
+    "2": {
+     "share": 0.038534282847900246,
+     "declined": 0.1985280341694263
+    }
+   }
+  },
+  "live_vs_topped": {
+   "declined": {
+    "p_bust_after_top": 0.22160594349765195,
+    "p_bust_after_other": 0.09417471598410297,
+    "p_bust_same_but_c_live": 0.10441663152011382,
+    "share": 0.12046073995797948
+   },
+   "taken": {
+    "p_bust_after_top": 0.21397630396732145,
+    "p_bust_after_other": 0.11061011387853435,
+    "p_bust_same_but_c_live": 0.1079610211469646,
+    "share": 0.32241539980741335
+   },
+   "declined, 3 markers": {
+    "p_bust_after_top": 0.23948591528629587,
+    "p_bust_after_other": 0.10030132295982623,
+    "p_bust_same_but_c_live": 0.10757058764761024,
+    "share": 0.11082908657897116
+   },
+   "taken, 3 markers": {
+    "p_bust_after_top": 0.24188331918930156,
+    "p_bust_after_other": 0.11626747308228788,
+    "p_bust_same_but_c_live": 0.11601533198484416,
+    "share": 0.2833166104583589
+   }
+  },
+  "declined_vs_taken": {
+   "declined": {
+    "other_two_columns": 0.18616253553171178,
+    "other_steps": 1.3193581677133395,
+    "top_steps": 1.251996823854527,
+    "other_contested": 0.47181345635132094,
+    "top_contested": 0.34509196070742315,
+    "hit_prob_c": 0.5021590392508491,
+    "c_still_one_step_after_other": 0.9364927077104883,
+    "would_bank_after_topping": 0.6552395644232571,
+    "steps_this_turn": 12.021506232541986,
+    "markers_after_top": 2.9064000663979805,
+    "threat": 0.31056627572330253
+   },
+   "taken": {
+    "other_two_columns": 0.1191702447482815,
+    "other_steps": 1.2033923891349885,
+    "top_steps": 1.3613164850504251,
+    "other_contested": 0.18996402536673265,
+    "top_contested": 0.26037270325486706,
+    "hit_prob_c": 0.45712893146084344,
+    "c_still_one_step_after_other": 0.9042100735745693,
+    "would_bank_after_topping": 0.8269096284474393,
+    "steps_this_turn": 11.560669251234343,
+    "markers_after_top": 2.8536156008614095,
+    "threat": 0.13699454965397498
+   }
+  },
+  "after_declining": {
+   "tops_c_later": 0.5370226648406814,
+   "busts": 0.3366207730636962,
+   "banks_without_c": 0.1263565620956223,
+   "bank_right_after_topping_when_taken": 0.8269096284474393
+  },
+  "rules": [
+   {
+    "rule": "always top",
+    "gate": "always",
+    "agreement": 0.7280035451406531,
+    "exact_cost_pts_per_turn": 0.1222791071617056,
+    "exact_cost_pts_per_game": 0.6230365068103224,
+    "se_pts_per_game": 0.015673733902266385,
+    "se_vs_always_top": 0.0
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 12%",
+    "gate": "always",
+    "agreement": 0.472613723509359,
+    "exact_cost_pts_per_turn": 0.32196349926505924,
+    "exact_cost_pts_per_game": 1.6404684214553298,
+    "se_pts_per_game": 0.014053765890949074,
+    "se_vs_always_top": 0.01576426076925298
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 12%",
+    "gate": "opponent's count <= 15",
+    "agreement": 0.756651142770519,
+    "exact_cost_pts_per_turn": 0.10383513186530902,
+    "exact_cost_pts_per_game": 0.5290607638801225,
+    "se_pts_per_game": 0.013372992574926022,
+    "se_vs_always_top": 0.006857230824873677
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 12%",
+    "gate": "opponent's count <= 20",
+    "agreement": 0.7662108957224452,
+    "exact_cost_pts_per_turn": 0.10114265599099376,
+    "exact_cost_pts_per_game": 0.5153420608053114,
+    "se_pts_per_game": 0.012757208350559227,
+    "se_vs_always_top": 0.00779564812161143
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 12%",
+    "gate": "opponent's count <= 25",
+    "agreement": 0.7714562221603452,
+    "exact_cost_pts_per_turn": 0.10306709376284616,
+    "exact_cost_pts_per_game": 0.5251474561404538,
+    "se_pts_per_game": 0.012687294156977329,
+    "se_vs_always_top": 0.008630812131596126
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 12%",
+    "gate": "opponent's count <= 30",
+    "agreement": 0.7684457707890912,
+    "exact_cost_pts_per_turn": 0.11255071900791747,
+    "exact_cost_pts_per_game": 0.5734684234891411,
+    "se_pts_per_game": 0.013349487581602548,
+    "se_vs_always_top": 0.009626013007852553
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 12%",
+    "gate": "opponent's count <= 40",
+    "agreement": 0.7548801979723833,
+    "exact_cost_pts_per_turn": 0.13464383271397554,
+    "exact_cost_pts_per_game": 0.6860372564442482,
+    "se_pts_per_game": 0.014260637550287251,
+    "se_vs_always_top": 0.011420666385297552
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 12%",
+    "gate": "opponent has 2 lanes",
+    "agreement": 0.7704250191421421,
+    "exact_cost_pts_per_turn": 0.09710116144242859,
+    "exact_cost_pts_per_game": 0.49474983778146214,
+    "se_pts_per_game": 0.012388268038233294,
+    "se_vs_always_top": 0.0073640140924013065
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 14%",
+    "gate": "always",
+    "agreement": 0.4333184768290735,
+    "exact_cost_pts_per_turn": 0.3627832137347614,
+    "exact_cost_pts_per_game": 1.8484530306213565,
+    "se_pts_per_game": 0.015576295742756019,
+    "se_vs_always_top": 0.017592797891122832
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 14%",
+    "gate": "opponent's count <= 15",
+    "agreement": 0.761296020123942,
+    "exact_cost_pts_per_turn": 0.10343421941365168,
+    "exact_cost_pts_per_game": 0.527018034756438,
+    "se_pts_per_game": 0.013406456793436085,
+    "se_vs_always_top": 0.007456598068769065
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 14%",
+    "gate": "opponent's count <= 20",
+    "agreement": 0.7708363539605018,
+    "exact_cost_pts_per_turn": 0.10183492406584845,
+    "exact_cost_pts_per_game": 0.518869305100311,
+    "se_pts_per_game": 0.012961373352512668,
+    "se_vs_always_top": 0.008464401953257683
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 14%",
+    "gate": "opponent's count <= 25",
+    "agreement": 0.774282751295934,
+    "exact_cost_pts_per_turn": 0.1061199389643324,
+    "exact_cost_pts_per_game": 0.5407023130110665,
+    "se_pts_per_game": 0.013126070593227668,
+    "se_vs_always_top": 0.009479417045973467
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 14%",
+    "gate": "opponent's count <= 30",
+    "agreement": 0.7690168071875386,
+    "exact_cost_pts_per_turn": 0.11907300288599043,
+    "exact_cost_pts_per_game": 0.6067007643046984,
+    "se_pts_per_game": 0.014133377273706869,
+    "se_vs_always_top": 0.010830814987384696
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 14%",
+    "gate": "opponent's count <= 40",
+    "agreement": 0.7506809998887903,
+    "exact_cost_pts_per_turn": 0.1470993357875885,
+    "exact_cost_pts_per_game": 0.7495005357049209,
+    "se_pts_per_game": 0.015545350138434286,
+    "se_vs_always_top": 0.013044126013242221
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 14%",
+    "gate": "opponent has 2 lanes",
+    "agreement": 0.7744824149279869,
+    "exact_cost_pts_per_turn": 0.09769037039450704,
+    "exact_cost_pts_per_game": 0.49775197523409226,
+    "se_pts_per_game": 0.012513607247350917,
+    "se_vs_always_top": 0.007915594664073745
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 16%",
+    "gate": "always",
+    "agreement": 0.41589774733527707,
+    "exact_cost_pts_per_turn": 0.38216976470109926,
+    "exact_cost_pts_per_game": 1.947231385105041,
+    "se_pts_per_game": 0.01676417972984317,
+    "se_vs_always_top": 0.018448933160973773
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 16%",
+    "gate": "opponent's count <= 15",
+    "agreement": 0.762476337159953,
+    "exact_cost_pts_per_turn": 0.10520791704632193,
+    "exact_cost_pts_per_game": 0.5360553789344196,
+    "se_pts_per_game": 0.013814683726613238,
+    "se_vs_always_top": 0.00792759913535656
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 16%",
+    "gate": "opponent's count <= 20",
+    "agreement": 0.7711624068019752,
+    "exact_cost_pts_per_turn": 0.1052366328882615,
+    "exact_cost_pts_per_game": 0.5362016918922701,
+    "se_pts_per_game": 0.013670156708900951,
+    "se_vs_always_top": 0.009105366454707964
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 16%",
+    "gate": "opponent's count <= 25",
+    "agreement": 0.7738863548733881,
+    "exact_cost_pts_per_turn": 0.11098961994972455,
+    "exact_cost_pts_per_game": 0.5655143115678365,
+    "se_pts_per_game": 0.014003101038928588,
+    "se_vs_always_top": 0.010254656043194246
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 16%",
+    "gate": "opponent's count <= 30",
+    "agreement": 0.7674297461148601,
+    "exact_cost_pts_per_turn": 0.125535378341524,
+    "exact_cost_pts_per_game": 0.6396278597257331,
+    "se_pts_per_game": 0.015123816673267567,
+    "se_vs_always_top": 0.01169401295138423
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 16%",
+    "gate": "opponent's count <= 40",
+    "agreement": 0.7474514938924093,
+    "exact_cost_pts_per_turn": 0.15596220650126452,
+    "exact_cost_pts_per_game": 0.794658634565243,
+    "se_pts_per_game": 0.016700891149872235,
+    "se_vs_always_top": 0.014043943068424495
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 16%",
+    "gate": "opponent has 2 lanes",
+    "agreement": 0.7749891438139167,
+    "exact_cost_pts_per_turn": 0.1007254403137081,
+    "exact_cost_pts_per_game": 0.5132162634864055,
+    "se_pts_per_game": 0.013114505060731665,
+    "se_vs_always_top": 0.008460068232638888
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 20%",
+    "gate": "always",
+    "agreement": 0.3703793958737185,
+    "exact_cost_pts_per_turn": 0.44476286934821,
+    "exact_cost_pts_per_game": 2.2661557719029997,
+    "se_pts_per_game": 0.01937371570666948,
+    "se_vs_always_top": 0.02042262644295928
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 20%",
+    "gate": "opponent's count <= 15",
+    "agreement": 0.7617071778698508,
+    "exact_cost_pts_per_turn": 0.11067752527754032,
+    "exact_cost_pts_per_game": 0.5639241267941235,
+    "se_pts_per_game": 0.014718189816769733,
+    "se_vs_always_top": 0.009018779688829914
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 20%",
+    "gate": "opponent's count <= 20",
+    "agreement": 0.7675689634768464,
+    "exact_cost_pts_per_turn": 0.1153577542434356,
+    "exact_cost_pts_per_game": 0.5877708294211531,
+    "se_pts_per_game": 0.01517639485973778,
+    "se_vs_always_top": 0.010491939702872247
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 20%",
+    "gate": "opponent's count <= 25",
+    "agreement": 0.7665252240463113,
+    "exact_cost_pts_per_turn": 0.1269689262973711,
+    "exact_cost_pts_per_game": 0.6469320732703653,
+    "se_pts_per_game": 0.01601156705935168,
+    "se_vs_always_top": 0.01202902487522026
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 20%",
+    "gate": "opponent's count <= 30",
+    "agreement": 0.7562849274613223,
+    "exact_cost_pts_per_turn": 0.14849424258134186,
+    "exact_cost_pts_per_game": 0.7566078648004531,
+    "se_pts_per_game": 0.017611302714286993,
+    "se_vs_always_top": 0.013931880687482101
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 20%",
+    "gate": "opponent's count <= 40",
+    "agreement": 0.7302637904254035,
+    "exact_cost_pts_per_turn": 0.18899267757104982,
+    "exact_cost_pts_per_game": 0.9629554907600131,
+    "se_pts_per_game": 0.019702437816613592,
+    "se_vs_always_top": 0.016703313606690973
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 20%",
+    "gate": "opponent has 2 lanes",
+    "agreement": 0.77109666119881,
+    "exact_cost_pts_per_turn": 0.11015614175597585,
+    "exact_cost_pts_per_game": 0.5612675734750482,
+    "se_pts_per_game": 0.01443363586493037,
+    "se_vs_always_top": 0.009751224230378988
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick keeps 2 live markers on 6/7/8",
+    "gate": "always",
+    "agreement": 0.43896106716784544,
+    "exact_cost_pts_per_turn": 0.3605508869372899,
+    "exact_cost_pts_per_game": 1.8370788791228796,
+    "se_pts_per_game": 0.015889952108875918,
+    "se_vs_always_top": 0.015675737643751044
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick keeps 2 live markers on 6/7/8",
+    "gate": "opponent's count <= 15",
+    "agreement": 0.7479280284341558,
+    "exact_cost_pts_per_turn": 0.11116955852980809,
+    "exact_cost_pts_per_game": 0.5664311346210782,
+    "se_pts_per_game": 0.014240832726553484,
+    "se_vs_always_top": 0.006340823876222477
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick keeps 2 live markers on 6/7/8",
+    "gate": "opponent's count <= 20",
+    "agreement": 0.7538808308208305,
+    "exact_cost_pts_per_turn": 0.11148963418450605,
+    "exact_cost_pts_per_game": 0.5680619840968952,
+    "se_pts_per_game": 0.014153712821371569,
+    "se_vs_always_top": 0.007279558071822046
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick keeps 2 live markers on 6/7/8",
+    "gate": "opponent's count <= 25",
+    "agreement": 0.7563419221841686,
+    "exact_cost_pts_per_turn": 0.11661389679797458,
+    "exact_cost_pts_per_game": 0.5941711269650402,
+    "se_pts_per_game": 0.014337987549764517,
+    "se_vs_always_top": 0.008309614612906155
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick keeps 2 live markers on 6/7/8",
+    "gate": "opponent's count <= 30",
+    "agreement": 0.7505713143589589,
+    "exact_cost_pts_per_turn": 0.13013834876070624,
+    "exact_cost_pts_per_game": 0.6630809146055504,
+    "se_pts_per_game": 0.015220775991078012,
+    "se_vs_always_top": 0.00963694479466676
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick keeps 2 live markers on 6/7/8",
+    "gate": "opponent's count <= 40",
+    "agreement": 0.7317938882613456,
+    "exact_cost_pts_per_turn": 0.159835365376426,
+    "exact_cost_pts_per_game": 0.8143931536659659,
+    "se_pts_per_game": 0.016605338028378207,
+    "se_vs_always_top": 0.01191599310026617
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick keeps 2 live markers on 6/7/8",
+    "gate": "opponent has 2 lanes",
+    "agreement": 0.7583492320909039,
+    "exact_cost_pts_per_turn": 0.10605219675946247,
+    "exact_cost_pts_per_game": 0.5403571529288131,
+    "se_pts_per_game": 0.013524076869510984,
+    "se_vs_always_top": 0.006659372931107996
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 12%, unless the opponent is past halfway on that column",
+    "gate": "always",
+    "agreement": 0.5087077195051118,
+    "exact_cost_pts_per_turn": 0.2718446159088913,
+    "exact_cost_pts_per_game": 1.385102686978983,
+    "se_pts_per_game": 0.012980890498296342,
+    "se_vs_always_top": 0.01496975358710853
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 12%, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 15",
+    "agreement": 0.7537122218394733,
+    "exact_cost_pts_per_turn": 0.10191320410547611,
+    "exact_cost_pts_per_game": 0.5192681575582219,
+    "se_pts_per_game": 0.013072557543060697,
+    "se_vs_always_top": 0.006065727040751665
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 12%, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 20",
+    "agreement": 0.7650358834943073,
+    "exact_cost_pts_per_turn": 0.09598872107496263,
+    "exact_cost_pts_per_game": 0.4890817316211496,
+    "se_pts_per_game": 0.012171458290607328,
+    "se_vs_always_top": 0.006826601821640233
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 12%, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 25",
+    "agreement": 0.7743292336764347,
+    "exact_cost_pts_per_turn": 0.09203050851655736,
+    "exact_cost_pts_per_game": 0.4689138469935631,
+    "se_pts_per_game": 0.011706845183904434,
+    "se_vs_always_top": 0.007334270884110873
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 12%, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 30",
+    "agreement": 0.7787451554058358,
+    "exact_cost_pts_per_turn": 0.0915389899027913,
+    "exact_cost_pts_per_game": 0.4664094613527023,
+    "se_pts_per_game": 0.011756456173455906,
+    "se_vs_always_top": 0.007663455095922584
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 12%, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 40",
+    "agreement": 0.7780032630330159,
+    "exact_cost_pts_per_turn": 0.09900917177905445,
+    "exact_cost_pts_per_game": 0.5044715320486383,
+    "se_pts_per_game": 0.011838239101613907,
+    "se_vs_always_top": 0.00879969211125838
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 12%, unless the opponent is past halfway on that column",
+    "gate": "opponent has 2 lanes",
+    "agreement": 0.7659409102551694,
+    "exact_cost_pts_per_turn": 0.097764768698115,
+    "exact_cost_pts_per_game": 0.4981310494706356,
+    "se_pts_per_game": 0.012476210998442153,
+    "se_vs_always_top": 0.006845325964880733
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 14%, unless the opponent is past halfway on that column",
+    "gate": "always",
+    "agreement": 0.4741663471082763,
+    "exact_cost_pts_per_turn": 0.3033002787557528,
+    "exact_cost_pts_per_game": 1.5453755803163116,
+    "se_pts_per_game": 0.014032949551022673,
+    "se_vs_always_top": 0.016635796725629627
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 14%, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 15",
+    "agreement": 0.7593967410123507,
+    "exact_cost_pts_per_turn": 0.09901087377859033,
+    "exact_cost_pts_per_game": 0.5044802040766735,
+    "se_pts_per_game": 0.012841235487890663,
+    "se_vs_always_top": 0.006663586560904707
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 14%, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 20",
+    "agreement": 0.7710067629670372,
+    "exact_cost_pts_per_turn": 0.09356555078873426,
+    "exact_cost_pts_per_game": 0.4767351943787588,
+    "se_pts_per_game": 0.011997327287151536,
+    "se_vs_always_top": 0.007384618398742937
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 14%, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 25",
+    "agreement": 0.7790798503239187,
+    "exact_cost_pts_per_turn": 0.091000172845494,
+    "exact_cost_pts_per_game": 0.46366408068236104,
+    "se_pts_per_game": 0.011621181772105735,
+    "se_vs_always_top": 0.007940380473791904
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 14%, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 30",
+    "agreement": 0.7822370014718011,
+    "exact_cost_pts_per_turn": 0.09224568462725398,
+    "exact_cost_pts_per_game": 0.4700102123127845,
+    "se_pts_per_game": 0.0118046819109677,
+    "se_vs_always_top": 0.00841108109694659
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 14%, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 40",
+    "agreement": 0.7778131136239896,
+    "exact_cost_pts_per_turn": 0.10378116828878366,
+    "exact_cost_pts_per_game": 0.5287858086650105,
+    "se_pts_per_game": 0.012227733873346698,
+    "se_vs_always_top": 0.00985059654974852
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 14%, unless the opponent is past halfway on that column",
+    "gate": "opponent has 2 lanes",
+    "agreement": 0.7708537031294279,
+    "exact_cost_pts_per_turn": 0.09632141998844271,
+    "exact_cost_pts_per_game": 0.4907768991251133,
+    "se_pts_per_game": 0.012413708320438645,
+    "se_vs_always_top": 0.007460852382462344
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 16%, unless the opponent is past halfway on that column",
+    "gate": "always",
+    "agreement": 0.4593857236262915,
+    "exact_cost_pts_per_turn": 0.31733772928716436,
+    "exact_cost_pts_per_game": 1.61689919826396,
+    "se_pts_per_game": 0.014996616491377969,
+    "se_vs_always_top": 0.017438528232649183
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 16%, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 15",
+    "agreement": 0.7616032001072225,
+    "exact_cost_pts_per_turn": 0.0986405522567303,
+    "exact_cost_pts_per_game": 0.5025933418584922,
+    "se_pts_per_game": 0.01296845477864025,
+    "se_vs_always_top": 0.006994844574916064
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 16%, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 20",
+    "agreement": 0.7726351565410923,
+    "exact_cost_pts_per_turn": 0.09435809102302113,
+    "exact_cost_pts_per_game": 0.48077334538049726,
+    "se_pts_per_game": 0.012356832409319873,
+    "se_vs_always_top": 0.007831173755823604
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 16%, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 25",
+    "agreement": 0.7803682948213331,
+    "exact_cost_pts_per_turn": 0.09259336251182881,
+    "exact_cost_pts_per_game": 0.4717817006702702,
+    "se_pts_per_game": 0.012090380938560283,
+    "se_vs_always_top": 0.008472074766924924
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 16%, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 30",
+    "agreement": 0.7826989533872107,
+    "exact_cost_pts_per_turn": 0.09476149475152935,
+    "exact_cost_pts_per_game": 0.4828287680579924,
+    "se_pts_per_game": 0.012367581124219694,
+    "se_vs_always_top": 0.009025683867890585
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 16%, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 40",
+    "agreement": 0.7769870521783317,
+    "exact_cost_pts_per_turn": 0.1078644108680008,
+    "exact_cost_pts_per_game": 0.5495907462546377,
+    "se_pts_per_game": 0.012959302303784644,
+    "se_vs_always_top": 0.01060165228413404
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 16%, unless the opponent is past halfway on that column",
+    "gate": "opponent has 2 lanes",
+    "agreement": 0.7721822434858642,
+    "exact_cost_pts_per_turn": 0.09766270871666104,
+    "exact_cost_pts_per_game": 0.49761103345313135,
+    "se_pts_per_game": 0.012822836386162974,
+    "se_vs_always_top": 0.007982410135368559
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 20%, unless the opponent is past halfway on that column",
+    "gate": "always",
+    "agreement": 0.42077440678775013,
+    "exact_cost_pts_per_turn": 0.36181950315552147,
+    "exact_cost_pts_per_game": 1.8435427324780131,
+    "se_pts_per_game": 0.016982043102252913,
+    "se_vs_always_top": 0.019063694332987473
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 20%, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 15",
+    "agreement": 0.7631166231117128,
+    "exact_cost_pts_per_turn": 0.09923308168485552,
+    "exact_cost_pts_per_game": 0.5056123978006759,
+    "se_pts_per_game": 0.013276412697448116,
+    "se_vs_always_top": 0.0076339531845095905
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 20%, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 20",
+    "agreement": 0.771871463012242,
+    "exact_cost_pts_per_turn": 0.09818195410650267,
+    "exact_cost_pts_per_game": 0.5002566925634524,
+    "se_pts_per_game": 0.01311363514946877,
+    "se_vs_always_top": 0.008652476156861563
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 20%, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 25",
+    "agreement": 0.7768442964858652,
+    "exact_cost_pts_per_turn": 0.09986511865968184,
+    "exact_cost_pts_per_game": 0.508832752594811,
+    "se_pts_per_game": 0.013175054119955301,
+    "se_vs_always_top": 0.009525083529762595
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 20%, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 30",
+    "agreement": 0.7764723254303498,
+    "exact_cost_pts_per_turn": 0.10590469205309776,
+    "exact_cost_pts_per_game": 0.5396055869489437,
+    "se_pts_per_game": 0.013757784863421262,
+    "se_vs_always_top": 0.010357635131775981
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 20%, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 40",
+    "agreement": 0.7658453851831617,
+    "exact_cost_pts_per_turn": 0.12569451534861878,
+    "exact_cost_pts_per_game": 0.6404386946042824,
+    "se_pts_per_game": 0.01482002098251438,
+    "se_vs_always_top": 0.012287657007638174
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 20%, unless the opponent is past halfway on that column",
+    "gate": "opponent has 2 lanes",
+    "agreement": 0.7701761531877918,
+    "exact_cost_pts_per_turn": 0.10318573609432793,
+    "exact_cost_pts_per_game": 0.5257519625478198,
+    "se_pts_per_game": 0.013778016390343121,
+    "se_vs_always_top": 0.009126371678287313
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick keeps 2 live markers on 6/7/8, unless the opponent is past halfway on that column",
+    "gate": "always",
+    "agreement": 0.47892793866387534,
+    "exact_cost_pts_per_turn": 0.3003220996813177,
+    "exact_cost_pts_per_game": 1.53020116229625,
+    "se_pts_per_game": 0.014359851410773151,
+    "se_vs_always_top": 0.014480598560236153
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick keeps 2 live markers on 6/7/8, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 15",
+    "agreement": 0.7466369589555416,
+    "exact_cost_pts_per_turn": 0.10813685685625987,
+    "exact_cost_pts_per_game": 0.5509789130540154,
+    "se_pts_per_game": 0.013849355968967513,
+    "se_vs_always_top": 0.005441553552682228
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick keeps 2 live markers on 6/7/8, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 20",
+    "agreement": 0.7546973063486841,
+    "exact_cost_pts_per_turn": 0.10436049012104874,
+    "exact_cost_pts_per_game": 0.5317375692647676,
+    "se_pts_per_game": 0.013402462518658944,
+    "se_vs_always_top": 0.006054032086595631
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick keeps 2 live markers on 6/7/8, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 25",
+    "agreement": 0.7617425013736248,
+    "exact_cost_pts_per_turn": 0.10203879649171846,
+    "exact_cost_pts_per_game": 0.5199080758846039,
+    "se_pts_per_game": 0.013070326102333376,
+    "se_vs_always_top": 0.0065432944391295485
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick keeps 2 live markers on 6/7/8, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 30",
+    "agreement": 0.7639214404318293,
+    "exact_cost_pts_per_turn": 0.1035972193601688,
+    "exact_cost_pts_per_game": 0.5278485520839321,
+    "se_pts_per_game": 0.01320398449784358,
+    "se_vs_always_top": 0.006915901341001299
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick keeps 2 live markers on 6/7/8, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 40",
+    "agreement": 0.7585361035015794,
+    "exact_cost_pts_per_turn": 0.11614720430529182,
+    "exact_cost_pts_per_game": 0.5917932353763229,
+    "se_pts_per_game": 0.013657340359962251,
+    "se_vs_always_top": 0.00833728130391097
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick keeps 2 live markers on 6/7/8, unless the opponent is past halfway on that column",
+    "gate": "opponent has 2 lanes",
+    "agreement": 0.7553622106487538,
+    "exact_cost_pts_per_turn": 0.10577555271190738,
+    "exact_cost_pts_per_game": 0.5389475961777105,
+    "se_pts_per_game": 0.0135367784029728,
+    "se_vs_always_top": 0.006149306630664994
+   }
+  ],
+  "examples": [
+   {
+    "me": {
+     "6": 11,
+     "7": 5,
+     "10": 6
+    },
+    "opp": {},
+    "tmp": {
+     "12": 1
+    },
+    "dice": [
+     4,
+     5,
+     6,
+     6
+    ],
+    "v_turn_start": 0.8753115334880825,
+    "threat": 0.03374941046314063,
+    "own_count": 21.0,
+    "opp_count": 94.0,
+    "options": [
+     {
+      "move": [
+       9,
+       12
+      ],
+      "value": 0.9004917948905151,
+      "tops": false,
+      "banks_after": false,
+      "p_bust_next": 0.0007716049382716049
+     },
+     {
+      "move": [
+       10,
+       11
+      ],
+      "value": 0.8769977476792785,
+      "tops": true,
+      "banks_after": true,
+      "p_bust_next": 0.6797839506172842
+     }
+    ]
+   },
+   {
+    "me": {
+     "2": 1,
+     "6": 11,
+     "10": 5
+    },
+    "opp": {
+     "3": 3,
+     "4": 5,
+     "5": 1,
+     "7": 13,
+     "8": 11
+    },
+    "tmp": {
+     "4": 2,
+     "10": 6,
+     "11": 2
+    },
+    "dice": [
+     2,
+     5,
+     5,
+     6
+    ],
+    "v_turn_start": 0.15220089905937764,
+    "threat": 0.637189101938008,
+    "own_count": 38.0,
+    "opp_count": 10.0,
+    "options": [
+     {
+      "move": [
+       11,
+       0
+      ],
+      "value": 0.20182987388085794,
+      "tops": false,
+      "banks_after": false,
+      "p_bust_next": 0.2438271604938272
+     },
+     {
+      "move": [
+       10,
+       0
+      ],
+      "value": 0.1520257324013804,
+      "tops": true,
+      "banks_after": true,
+      "p_bust_next": 0.43904320987654327
+     }
+    ]
+   },
+   {
+    "me": {
+     "4": 7,
+     "8": 9
+    },
+    "opp": {
+     "6": 11,
+     "7": 10,
+     "10": 6
+    },
+    "tmp": {
+     "7": 9,
+     "8": 10,
+     "10": 3
+    },
+    "dice": [
+     3,
+     4,
+     5,
+     6
+    ],
+    "v_turn_start": 0.27817329481122444,
+    "threat": 0.42859429236117,
+    "own_count": 32.0,
+    "opp_count": 11.0,
+    "options": [
+     {
+      "move": [
+       7,
+       0
+      ],
+      "value": 0.5904460161660994,
+      "tops": false,
+      "banks_after": false,
+      "p_bust_next": 0.11419753086419751
+     },
+     {
+      "move": [
+       8,
+       10
+      ],
+      "value": 0.4832451597355276,
+      "tops": true,
+      "banks_after": true,
+      "p_bust_next": 0.23070987654320996
+     }
+    ]
+   },
+   {
+    "me": {
+     "5": 6,
+     "6": 2,
+     "7": 13,
+     "10": 3,
+     "12": 1
+    },
+    "opp": {
+     "4": 7,
+     "6": 6,
+     "10": 4
+    },
+    "tmp": {
+     "5": 8,
+     "6": 6,
+     "10": 4
+    },
+    "dice": [
+     1,
+     2,
+     4,
+     6
+    ],
+    "v_turn_start": 0.6080062670166647,
+    "threat": 0.23370856845417456,
+    "own_count": 32.0,
+    "opp_count": 30.0,
+    "options": [
+     {
+      "move": [
+       10,
+       0
+      ],
+      "value": 0.6869113716948392,
+      "tops": false,
+      "banks_after": false,
+      "p_bust_next": 0.13734567901234573
+     },
+     {
+      "move": [
+       6,
+       0
+      ],
+      "value": 0.6635523947696137,
+      "tops": false,
+      "banks_after": false,
+      "p_bust_next": 0.13734567901234573
+     },
+     {
+      "move": [
+       5,
+       0
+      ],
+      "value": 0.6624707484919066,
+      "tops": true,
+      "banks_after": true,
+      "p_bust_next": 0.25308641975308643
+     }
+    ]
+   }
+  ]
+ },
+ "tops_check_S": {
+  "turns": 800,
+  "offers_per_turn": 0.42354468034226544,
+  "declined_share": 0.11713794999981661,
+  "declined_share_real_choice": 0.2753430773576215,
+  "value_lost_by_topping_pts": 3.4095975357954185,
+  "after_declining": {
+   "tops_c_later": 0.5590201184774174,
+   "busts": 0.32789781265276813,
+   "banks_without_c": 0.11308206886981453,
+   "bank_right_after_topping_when_taken": 0.8228324572062266
+  },
+  "live_vs_topped": {
+   "declined": {
+    "p_bust_after_top": 0.2282682604490587,
+    "p_bust_after_other": 0.09900302259152673,
+    "p_bust_same_but_c_live": 0.10416202822734798,
+    "share": 0.11790341895646086
+   },
+   "taken": {
+    "p_bust_after_top": 0.21288970328344134,
+    "p_bust_after_other": 0.11041069256442673,
+    "p_bust_same_but_c_live": 0.10778286988250937,
+    "share": 0.31030207684877914
+   },
+   "declined, 3 markers": {
+    "p_bust_after_top": 0.24196471487077847,
+    "p_bust_after_other": 0.10331973804915381,
+    "p_bust_same_but_c_live": 0.10793176735877118,
+    "share": 0.1107019242574252
+   },
+   "taken, 3 markers": {
+    "p_bust_after_top": 0.24172142876131555,
+    "p_bust_after_other": 0.11602338901617676,
+    "p_bust_same_but_c_live": 0.11644878367613579,
+    "share": 0.2716566417525806
+   }
+  },
+  "rules": [
+   {
+    "rule": "always top",
+    "gate": "always",
+    "agreement": 0.7246569226423785,
+    "exact_cost_pts_per_turn": 0.1140708483882101,
+    "exact_cost_pts_per_game": 0.5808677718008305,
+    "se_pts_per_game": 0.04013373540127678,
+    "se_vs_always_top": 0.0
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 12%",
+    "gate": "always",
+    "agreement": 0.4749713339764964,
+    "exact_cost_pts_per_turn": 0.309209418896919,
+    "exact_cost_pts_per_game": 1.574545895926261,
+    "se_pts_per_game": 0.039661651541953905,
+    "se_vs_always_top": 0.04788300805862948
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 12%",
+    "gate": "opponent's count <= 25",
+    "agreement": 0.7599886221528844,
+    "exact_cost_pts_per_turn": 0.10250225852869169,
+    "exact_cost_pts_per_game": 0.5219585841378528,
+    "se_pts_per_game": 0.0353448444688806,
+    "se_vs_always_top": 0.025435124347430376
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 14%",
+    "gate": "always",
+    "agreement": 0.4381628280874998,
+    "exact_cost_pts_per_turn": 0.34593743117876674,
+    "exact_cost_pts_per_game": 1.76157105580081,
+    "se_pts_per_game": 0.044928035550153386,
+    "se_vs_always_top": 0.05488554613319023
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 14%",
+    "gate": "opponent's count <= 25",
+    "agreement": 0.763659742020644,
+    "exact_cost_pts_per_turn": 0.10373835012254526,
+    "exact_cost_pts_per_game": 0.5282529685490208,
+    "se_pts_per_game": 0.03617521010251764,
+    "se_vs_always_top": 0.02956090548461959
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 16%",
+    "gate": "always",
+    "agreement": 0.4258575945053679,
+    "exact_cost_pts_per_turn": 0.3610232890862507,
+    "exact_cost_pts_per_game": 1.8383907585753696,
+    "se_pts_per_game": 0.04748214282851404,
+    "se_vs_always_top": 0.05711523893979614
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 16%",
+    "gate": "opponent's count <= 25",
+    "agreement": 0.7656755045801006,
+    "exact_cost_pts_per_turn": 0.10700055140769218,
+    "exact_cost_pts_per_game": 0.5448646411932032,
+    "se_pts_per_game": 0.03726479761129466,
+    "se_vs_always_top": 0.03135770820433744
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 20%",
+    "gate": "always",
+    "agreement": 0.3793411607493745,
+    "exact_cost_pts_per_turn": 0.4217178413807549,
+    "exact_cost_pts_per_game": 2.147457534617701,
+    "se_pts_per_game": 0.05599070169127892,
+    "se_vs_always_top": 0.06311453615743892
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 20%",
+    "gate": "opponent's count <= 25",
+    "agreement": 0.758852985618938,
+    "exact_cost_pts_per_turn": 0.12230610608584508,
+    "exact_cost_pts_per_game": 0.6228030765401374,
+    "se_pts_per_game": 0.04306957913552249,
+    "se_vs_always_top": 0.03685517625001576
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick keeps 2 live markers on 6/7/8",
+    "gate": "always",
+    "agreement": 0.43837696939361803,
+    "exact_cost_pts_per_turn": 0.3463911000137397,
+    "exact_cost_pts_per_game": 1.7638812131199646,
+    "se_pts_per_game": 0.04416846980854384,
+    "se_vs_always_top": 0.047365858455244374
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick keeps 2 live markers on 6/7/8",
+    "gate": "opponent's count <= 25",
+    "agreement": 0.7442264840338784,
+    "exact_cost_pts_per_turn": 0.11656000688387685,
+    "exact_cost_pts_per_game": 0.5935429817205149,
+    "se_pts_per_game": 0.040013027658665525,
+    "se_vs_always_top": 0.02482399529878494
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 12%, unless the opponent is past halfway on that column",
+    "gate": "always",
+    "agreement": 0.5097508762837143,
+    "exact_cost_pts_per_turn": 0.25882449815764696,
+    "exact_cost_pts_per_game": 1.317977482035098,
+    "se_pts_per_game": 0.03584517072642023,
+    "se_vs_always_top": 0.04432195626257352
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 12%, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 25",
+    "agreement": 0.7637930200009434,
+    "exact_cost_pts_per_turn": 0.08665432687274745,
+    "exact_cost_pts_per_game": 0.4412582748238421,
+    "se_pts_per_game": 0.030417199542613457,
+    "se_vs_always_top": 0.017972729080913234
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 14%, unless the opponent is past halfway on that column",
+    "gate": "always",
+    "agreement": 0.4778364618460521,
+    "exact_cost_pts_per_turn": 0.2880221172073565,
+    "exact_cost_pts_per_game": 1.4666566245060604,
+    "se_pts_per_game": 0.03933872027440513,
+    "se_vs_always_top": 0.04994764143253187
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 14%, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 25",
+    "agreement": 0.769518988876183,
+    "exact_cost_pts_per_turn": 0.08440811200834517,
+    "exact_cost_pts_per_game": 0.4298201743651616,
+    "se_pts_per_game": 0.029162644349791985,
+    "se_vs_always_top": 0.020302694310298613
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 16%, unless the opponent is past halfway on that column",
+    "gate": "always",
+    "agreement": 0.46877406461970406,
+    "exact_cost_pts_per_turn": 0.2974215091987774,
+    "exact_cost_pts_per_game": 1.5145198950917076,
+    "se_pts_per_game": 0.04104430366244619,
+    "se_vs_always_top": 0.052110685975075136
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 16%, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 25",
+    "agreement": 0.7731687996395691,
+    "exact_cost_pts_per_turn": 0.08407346840619673,
+    "exact_cost_pts_per_game": 0.4281161133690881,
+    "se_pts_per_game": 0.028540352408584383,
+    "se_vs_always_top": 0.02150012586615215
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 20%, unless the opponent is past halfway on that column",
+    "gate": "always",
+    "agreement": 0.4279910452214481,
+    "exact_cost_pts_per_turn": 0.34259609499738736,
+    "exact_cost_pts_per_game": 1.7445564150758626,
+    "se_pts_per_game": 0.047489034125958826,
+    "se_vs_always_top": 0.05674481159761108
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick leaves P(bust) <= 20%, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 25",
+    "agreement": 0.7691723610403052,
+    "exact_cost_pts_per_turn": 0.09188338553614064,
+    "exact_cost_pts_per_game": 0.4678855130476175,
+    "se_pts_per_game": 0.03126527110733524,
+    "se_vs_always_top": 0.024664682644944844
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick keeps 2 live markers on 6/7/8, unless the opponent is past halfway on that column",
+    "gate": "always",
+    "agreement": 0.4779773226656197,
+    "exact_cost_pts_per_turn": 0.28770253299698234,
+    "exact_cost_pts_per_game": 1.4650292484428002,
+    "se_pts_per_game": 0.038989361680450293,
+    "se_vs_always_top": 0.04271460594533107
+   },
+   {
+    "rule": "decline iff topping uses your last marker and the other pick keeps 2 live markers on 6/7/8, unless the opponent is past halfway on that column",
+    "gate": "opponent's count <= 25",
+    "agreement": 0.751217554931257,
+    "exact_cost_pts_per_turn": 0.09769187843014422,
+    "exact_cost_pts_per_game": 0.49746332694603274,
+    "se_pts_per_game": 0.03430563088551137,
+    "se_vs_always_top": 0.015433750305028271
+   }
+  ]
+ }
+}

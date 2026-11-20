@@ -15,6 +15,7 @@ def test_reach_is_a_distribution_and_rule_value_matches():
     sol, tp = _empty()
     assert abs(sp.check_turn(sol, tp) - 1) < 1e-9  # also checks the forced optimal rule reproduces best[0]
     assert (tp['reach'][tp['dec']] > 0).all() and abs(sum(fr.ROLL_PROB[r] for r in range(fr.N_ROLLS) if tp['first'][r] < 0)) < 1e-12
+    assert (tp['fresh'] <= tp['reach'] + 1e-12).all() and tp['fresh'][0] == 0
     worse = sp.rule_value(sol, np.where(sp.feats(sol, tp)['steps'] >= 3, 1, 2))
     assert worse < sol.best[0]
 

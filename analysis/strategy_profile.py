@@ -54,12 +54,12 @@ def _roll_row(urow, r, best):
     return j
 
 @njit(cache=True)
-def _reach(child, best, act_stop, order):
+def _reach(child, best, act_stop, order, T):
     # forward pass of the policy (picks maximize best, act_stop[i]: bank at row i); returns reach, stop mass, bust mass
-    # per row and the row chosen by each first roll (-1: bust)
+    # per row, the row chosen by each first roll (-1: bust), and fresh: reach arriving by a pick that topped a column
     ptr, cmv, crow = child
     n = len(best)
-    reach, stopm, bustm = np.zeros(n), np.zeros(n), np.zeros(n)
+    reach, stopm, bustm, fresh = np.zeros(n), np.zeros(n), np.zeros(n), np.zeros(n)
     first = np.full(fr.N_ROLLS, -1, np.int64)
     urow, srow = np.empty(len(fr.UPAIRS), np.int64), np.empty(13, np.int64)
     reach[0] = 1.0
@@ -79,7 +79,11 @@ def _reach(child, best, act_stop, order):
                 bustm[i] += reach[i] * fr.ROLL_PROB[r]
             else:
                 reach[j] += reach[i] * fr.ROLL_PROB[r]
-    return reach, stopm, bustm, first
+                for c in range(2, 13):
+                    if T[j, c] == LEN[c] and T[i, c] < LEN[c]:
+                        fresh[j] += reach[i] * fr.ROLL_PROB[r]
+                        break
+    return reach, stopm, bustm, first, fresh
 
 @njit(cache=True)
 def _forced(child, stop, bust_val, order, force):
@@ -105,10 +109,10 @@ def turn_policy(sol):
     # reach analysis of a full (unbounded) turn solve; decision rows: reached, not the root, not a winning bank
     act_stop = ~(sol.go > sol.stop)  # nan go (winning leaf) -> bank
     act_stop[0] = False
-    reach, stopm, bustm, first = _reach(sol.child, sol.best, act_stop, sol.order)
     T = tmps(sol)
+    reach, stopm, bustm, first, fresh = _reach(sol.child, sol.best, act_stop, sol.order, T)
     adv = np.where(T > 0, T - sol.prog[sol.p], 0)
-    return dict(reach=reach, stopm=stopm, bustm=bustm, first=first, T=T, adv=adv, act_stop=act_stop,
+    return dict(reach=reach, stopm=stopm, bustm=bustm, first=first, fresh=fresh, T=T, adv=adv, act_stop=act_stop,
                 win=sol.stop >= 1.0, dec=(reach > 0) & (sol.stop < 1.0) & (np.arange(len(reach)) > 0))
 
 def feats(sol, tp):
@@ -329,8 +333,10 @@ def opening_for(V, prog, p, trees=True):
     check_turn(sol, tp)
     out = dict(board=prog.tolist(), p=p, **summarize_turn(sol, tp))
     f, dec, reach = feats(sol, tp), tp['dec'], tp['reach']
+    fm = tp['fresh'] * dec  # decisions right after a pick that topped a column (P(bank) there = act_stop of the row)
+    out['p_bank_given_topped'] = float((fm * tp['act_stop']).sum() / max(fm.sum(), 1e-12))
     k = dec & (f['topped'] > 0)
-    out['p_bank_given_topped'] = float(tp['stopm'][k].sum() / max(reach[k].sum(), 1e-12))
+    out['p_bank_any_topped'] = float(tp['stopm'][k].sum() / max(reach[k].sum(), 1e-12))  # any column topped this turn
     k = dec & (f['topped'] == 0)
     out['p_bank_not_topped'] = float(tp['stopm'][k].sum() / max(reach[k].sum(), 1e-12))  # per decision, like the above
     out['p_turn_plain_bank'] = float(tp['stopm'][k].sum())  # share of turns ending in a bank with nothing topped
@@ -412,8 +418,11 @@ def hit_prob():
     # P(a roll offers column c in some pair)
     return {int(c): float(sum(fr.ROLL_PROB[r] for r in range(fr.N_ROLLS) if c in fr.ROLL_PAIRS[r, :fr.ROLL_NPAIRS[r]])) for c in COLS}
 
-def turns_to_top(c, iters=2000):
-    # expected turns to top column c from 0 playing it alone (all other columns ignored), stopping optimally (value iteration).
+def turns_to_top(c):
+    return float(turns_left(c)[0])
+
+def turns_left(c, iters=2000):
+    # T[h]: expected turns to top column c from height h playing it alone (all other columns ignored), stopping optimally (value iteration).
     # per roll: +2 if some split gives (c, c), else +1 if some pair sums to c, else bust
     p2 = sum(fr.ROLL_PROB[r] for r in range(fr.N_ROLLS) if any(tuple(x) == (c, c) for x in fr.ROLL_PAIRS[r, :fr.ROLL_NPAIRS[r]]))
     p1 = hit_prob()[c] - p2
@@ -429,7 +438,14 @@ def turns_to_top(c, iters=2000):
         if np.abs(new - T).max() < 1e-12:
             break
         T = new
-    return float(T[0])
+    return T[:LEN[c] + 1]
+
+def fresh_top(tmp, turn_key):
+    # decisions whose pick just topped a column: a column at its top now that wasn't at the previous decision of the turn
+    prev = np.zeros_like(tmp)
+    same = np.r_[False, turn_key[1:] == turn_key[:-1]]
+    prev[same] = tmp[:-1][same[1:]]
+    return ((tmp == LEN) & (prev < LEN) & (tmp > 0)).any(1)
 
 def mean_or_none(x):
     return float(x.mean()) if len(x) else None
@@ -485,20 +501,25 @@ def games_summary(model):
     st['first_on_existing_progress'] = float((first[m] & own[m]).any(1).mean())
     st['offered_existing_progress'] = float((avail[m] & own[m]).any(1).mean())
     out['starts'] = st
-    # bail-out: go/stop decisions (winning banks are never decisions); split by whether banking would top a column
+    # bail-out: go/stop decisions (winning banks are never decisions); split by whether the pick just topped a column (fresh),
+    # a column was topped earlier this turn (the agent kept rolling), or nothing is topped (a bank would be a plain bank)
     bank, thr, v, tmp = z['d_bank'], z['d_threat'], z['d_v_me'], z['d_tmp']
     I = np.arange(len(bank))
     mine = z['d_prog'][I, z['d_p']]
     top = ((tmp == LEN) & (tmp > 0)).any(1)
+    fresh = fresh_top(tmp, z['d_game'] * 1000 + z['d_turn'])
+    old = top & ~fresh
     steps = np.where(tmp > 0, tmp - mine, 0).sum(1)
     vb, tb = np.linspace(0, 1, 11), np.array([0, .02, .05, .1, .15, .2, .3, .4, .5, .7, 1.0001])
     for nm, x, bins in (('threat', thr, tb), ('v', v, vb), ('opp_dist', z['d_dist_opp'], np.array([1, 2, 3, 4, 5, 7, 10, 15, 20]))):
-        out[f'bank_vs_{nm}'] = dict(all=rate_table(x, bank, bins), top=rate_table(x[top], bank[top], bins), no_top=rate_table(x[~top], bank[~top], bins))
+        out[f'bank_vs_{nm}'] = dict(all=rate_table(x, bank, bins), top=rate_table(x[fresh], bank[fresh], bins), no_top=rate_table(x[~top], bank[~top], bins),
+                                    topped_earlier=rate_table(x[old], bank[old], bins))
     late = bank & ~top & (z['d_turn'] >= 2)  # turns 0-1 (deep opening banks) excluded; "rate" = mean steps banked
     out['steps_at_bank_vs_v'] = rate_table(v[late], steps[late], vb)
     out['steps_at_bank_vs_threat'] = rate_table(thr[bank & ~top], steps[bank & ~top], tb)
     out['bank_by_score'] = [dict(won_me=i, won_opp=j, n=int(m.sum()), bank=mean_or_none(bank[m]), bank_no_top=mean_or_none(bank[m & ~top]),
-                                 bank_if_top=mean_or_none(bank[m & top]), n_top=int((m & top).sum()))
+                                 bank_if_top=mean_or_none(bank[m & fresh]), n_top=int((m & fresh).sum()),
+                                 bank_if_topped_earlier=mean_or_none(bank[m & old]), n_topped_earlier=int((m & old).sum()))
                             for i in range(3) for j in range(3) for m in [(z['d_won_me'] == i) & (z['d_won_opp'] == j)] if m.any()]
     vb2, tb2 = np.array([0, .2, .35, .5, .65, .8, 1]), np.array([0, .05, .15, .3, .5, 1.0001])
     cell = (np.digitize(v, vb2) - 1) * 10 + np.digitize(thr, tb2) - 1
@@ -517,6 +538,7 @@ def games_summary(model):
         out[f'turn_vs_{nm}'] = dict(bank_top=rate_table(x, bt, bins), bank_no_top=rate_table(x, bn, bins), win=rate_table(x, tn == 'win', bins),
                                     bust=rate_table(x, tn == 'bust', bins))
     out['n_decisions'], out['n_turns'], out['share_decisions_top'] = int(len(bank)), int(len(tn)), float(top.mean())
+    out['share_decisions_fresh_top'] = float(fresh.mean())
     return out
 
 if __name__ == '__main__':
